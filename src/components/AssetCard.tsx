@@ -1,0 +1,44 @@
+import { Link } from "@tanstack/react-router";
+
+import type { QuoteSnapshot } from "@/lib/api/finance.functions";
+import { fmtBRL, fmtCurrency, fmtPercent } from "@/lib/finance/format";
+
+import { Sparkline } from "./Sparkline";
+
+export function AssetCard({ q }: { q: QuoteSnapshot }) {
+  const positive = (q.changePercent ?? 0) >= 0;
+  return (
+    <Link
+      to="/ativo/$slug"
+      params={{ slug: q.slug }}
+      className="bg-brand-surface border border-brand-border p-4 rounded-lg hover:border-brand-accent/50 transition-colors block"
+    >
+      <div className="flex justify-between items-start mb-2 gap-3">
+        <div className="min-w-0">
+          <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider block truncate">
+            {q.symbol}
+          </span>
+          <div className="text-lg font-display font-bold tabular-nums truncate">
+            {fmtCurrency(q.price, q.currency)}
+          </div>
+          <div className="text-xs text-brand-muted truncate">{q.name}</div>
+        </div>
+        <div className={`text-sm font-medium tabular-nums shrink-0 ${positive ? "text-brand-positive" : "text-brand-negative"}`}>
+          {q.changePercent != null ? `${positive ? "+" : ""}${q.changePercent.toFixed(2)}%` : "—"}
+        </div>
+      </div>
+      {q.currency !== "BRL" && (
+        <div className="text-xs text-brand-muted/80 mb-3 tabular-nums">{fmtBRL(q.priceBRL)}</div>
+      )}
+      {q.currency === "BRL" && q.changePercent != null && (
+        <div className="text-xs text-brand-muted/80 mb-3">Variação 24h {fmtPercent(q.changePercent)}</div>
+      )}
+      <Sparkline values={q.sparkline} positive={positive} />
+      {q.stale && (
+        <div className="mt-2 text-[10px] text-brand-negative/80 uppercase tracking-wider">
+          Dados indisponíveis
+        </div>
+      )}
+    </Link>
+  );
+}
