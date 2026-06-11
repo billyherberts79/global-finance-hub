@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SaudeRouteImport } from './routes/saude'
+import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AtivoSlugRouteImport } from './routes/ativo.$slug'
 
 const SaudeRoute = SaudeRouteImport.update({
   id: '/saude',
   path: '/saude',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RelatoriosRoute = RelatoriosRouteImport.update({
+  id: '/relatorios',
+  path: '/relatorios',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -31,30 +37,34 @@ const AtivoSlugRoute = AtivoSlugRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/relatorios': typeof RelatoriosRoute
   '/saude': typeof SaudeRoute
   '/ativo/$slug': typeof AtivoSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/relatorios': typeof RelatoriosRoute
   '/saude': typeof SaudeRoute
   '/ativo/$slug': typeof AtivoSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/relatorios': typeof RelatoriosRoute
   '/saude': typeof SaudeRoute
   '/ativo/$slug': typeof AtivoSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/saude' | '/ativo/$slug'
+  fullPaths: '/' | '/relatorios' | '/saude' | '/ativo/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/saude' | '/ativo/$slug'
-  id: '__root__' | '/' | '/saude' | '/ativo/$slug'
+  to: '/' | '/relatorios' | '/saude' | '/ativo/$slug'
+  id: '__root__' | '/' | '/relatorios' | '/saude' | '/ativo/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  RelatoriosRoute: typeof RelatoriosRoute
   SaudeRoute: typeof SaudeRoute
   AtivoSlugRoute: typeof AtivoSlugRoute
 }
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/saude'
       fullPath: '/saude'
       preLoaderRoute: typeof SaudeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/relatorios': {
+      id: '/relatorios'
+      path: '/relatorios'
+      fullPath: '/relatorios'
+      preLoaderRoute: typeof RelatoriosRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  RelatoriosRoute: RelatoriosRoute,
   SaudeRoute: SaudeRoute,
   AtivoSlugRoute: AtivoSlugRoute,
 }
