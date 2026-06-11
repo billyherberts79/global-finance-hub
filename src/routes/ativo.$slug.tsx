@@ -239,9 +239,10 @@ function AssetDetail() {
                     <Tooltip
                       contentStyle={{ background: "var(--brand-bg)", border: "1px solid var(--brand-border)", fontSize: 12 }}
                       labelStyle={{ color: "var(--brand-muted)" }}
-                      formatter={(value: number | null | undefined, name: string) =>
-                        value == null ? ["—", name] : [fmtCurrency(value, asset.currency), name]
-                      }
+                      formatter={(value, name) => {
+                        const n = typeof value === "number" ? value : Number(value);
+                        return [Number.isFinite(n) ? fmtCurrency(n, asset.currency) : "—", String(name)];
+                      }}
                     />
                     {/* Forecast confidence band */}
                     <Area type="monotone" dataKey="band" stroke="none" fill="var(--brand-accent)" fillOpacity={0.12} isAnimationActive={false} />
