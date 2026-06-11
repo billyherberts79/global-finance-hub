@@ -9,38 +9,82 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as SaudeRouteImport } from './routes/saude'
+import { Route as RelatoriosRouteImport } from './routes/relatorios'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AtivoSlugRouteImport } from './routes/ativo.$slug'
 
+const SaudeRoute = SaudeRouteImport.update({
+  id: '/saude',
+  path: '/saude',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RelatoriosRoute = RelatoriosRouteImport.update({
+  id: '/relatorios',
+  path: '/relatorios',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AtivoSlugRoute = AtivoSlugRouteImport.update({
+  id: '/ativo/$slug',
+  path: '/ativo/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/relatorios': typeof RelatoriosRoute
+  '/saude': typeof SaudeRoute
+  '/ativo/$slug': typeof AtivoSlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/relatorios': typeof RelatoriosRoute
+  '/saude': typeof SaudeRoute
+  '/ativo/$slug': typeof AtivoSlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/relatorios': typeof RelatoriosRoute
+  '/saude': typeof SaudeRoute
+  '/ativo/$slug': typeof AtivoSlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/relatorios' | '/saude' | '/ativo/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/relatorios' | '/saude' | '/ativo/$slug'
+  id: '__root__' | '/' | '/relatorios' | '/saude' | '/ativo/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  RelatoriosRoute: typeof RelatoriosRoute
+  SaudeRoute: typeof SaudeRoute
+  AtivoSlugRoute: typeof AtivoSlugRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/saude': {
+      id: '/saude'
+      path: '/saude'
+      fullPath: '/saude'
+      preLoaderRoute: typeof SaudeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/relatorios': {
+      id: '/relatorios'
+      path: '/relatorios'
+      fullPath: '/relatorios'
+      preLoaderRoute: typeof RelatoriosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,22 +92,22 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/ativo/$slug': {
+      id: '/ativo/$slug'
+      path: '/ativo/$slug'
+      fullPath: '/ativo/$slug'
+      preLoaderRoute: typeof AtivoSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  RelatoriosRoute: RelatoriosRoute,
+  SaudeRoute: SaudeRoute,
+  AtivoSlugRoute: AtivoSlugRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
