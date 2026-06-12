@@ -288,7 +288,11 @@ export const getQuotes = createServerFn({ method: "GET" }).handler(async (): Pro
 // =============================================================================
 
 export const getHistory = createServerFn({ method: "GET" })
-  .inputValidator(z.object({ slug: z.string(), range: z.enum(["1mo", "3mo", "6mo", "1y", "2y", "5y"]).default("1y") }))
+  .inputValidator(z.object({
+    slug: z.string(),
+    range: z.enum(["1mo", "3mo", "6mo", "1y", "2y", "5y"]).default("1y"),
+    interval: z.enum(["1d", "1wk"]).default("1d"),
+  }))
   .handler(async ({ data }): Promise<HistoryResponse> => {
     const t0 = Date.now();
     const asset = findAsset(data.slug);
@@ -301,9 +305,30 @@ export const getHistory = createServerFn({ method: "GET" })
     if (asset.source === "coingecko") {
       const days = data.range === "1mo" ? 30 : data.range === "3mo" ? 90 : data.range === "6mo" ? 180 : data.range === "1y" ? 365 : data.range === "2y" ? 730 : 1825;
       const chart = await coingeckoMarketChart(asset.apiId, days);
-      candles = chart.prices.map(([t, p]) => ({ t, open: null, high: null, low: null, close: p, volume: null }));
+      let daily = chart.prices.map(([t, p]) => ({ t, open: null, high: null, low: null, close: p, volume: null } as HistoryCandle));
+      if (data.interval === "1wk") {
+        // Aggregate by ISO week
+        const weeks = new Map<string, HistoryCandle[]>();
+        for (const c of daily) {
+          const d = new Date(c.t);
+          const day = d.getUTCDay();
+          const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - ((day + 6) % 7)));
+          const k = monday.toISOString().slice(0, 10);
+          if (!weeks.has(k)) weeks.set(k, []);
+          weeks.get(k)!.push(c);
+        }
+        daily = Array.from(weeks.entries()).map(([k, list]) => ({
+          t: new Date(k).getTime(),
+          open: list[0].close,
+          high: Math.max(...list.map((x) => x.close)),
+          low: Math.min(...list.map((x) => x.close)),
+          close: list[list.length - 1].close,
+          volume: null,
+        }));
+      }
+      candles = daily;
     } else {
-      const yr = await yahooChart(asset.apiId, data.range, "1d");
+      const yr = await yahooChart(asset.apiId, data.range, data.interval);
       const r = yr.chart.result?.[0];
       const ts = r?.timestamp ?? [];
       const q = r?.indicators.quote[0];
