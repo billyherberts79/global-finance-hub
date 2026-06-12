@@ -8,6 +8,19 @@ const CNY = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "CNY",
 const NUM = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2 });
 const PCT = new Intl.NumberFormat("pt-BR", { style: "percent", maximumFractionDigits: 2, minimumFractionDigits: 2 });
 
+const PTS = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+
+export function fmtPoints(value: number | null | undefined): string {
+  if (value == null || !Number.isFinite(value)) return "—";
+  return `${PTS.format(value)} pts`;
+}
+
+/** Format a price for an asset, treating indices as points (no currency symbol). */
+export function fmtPrice(value: number | null | undefined, currency: string, category?: string): string {
+  if (category === "indices") return fmtPoints(value);
+  return fmtCurrency(value, currency);
+}
+
 export function fmtCurrency(value: number | null | undefined, currency: string): string {
   if (value == null || !Number.isFinite(value)) return "—";
   switch (currency) {

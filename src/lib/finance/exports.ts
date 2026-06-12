@@ -13,6 +13,48 @@ function download(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+function csvEscape(v: unknown): string {
+  if (v == null) return "";
+  const s = String(v);
+  return /[",;\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+export function exportHistoryCSV(
+  name: string,
+  symbol: string,
+  currency: string,
+  candles: HistoryCandle[],
+  fxToBRL: number,
+) {
+  const header = ["Data", "Abertura", "Maxima", "Minima", "Fechamento", `Fechamento_BRL`, "Volume"];
+  const rows = candles.map((c) => [
+    new Date(c.t).toLocaleDateString("pt-BR"),
+    c.open ?? "",
+    c.high ?? "",
+    c.low ?? "",
+    c.close,
+    (c.close * fxToBRL).toFixed(4),
+    c.volume ?? "",
+  ]);
+  const csv = [header, ...rows].map((r) => r.map(csvEscape).join(";")).join("\n");
+  // BOM for Excel pt-BR
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+  download(blob, `historico-${symbol.replace(/[^a-z0-9]/gi, "_")}.csv`);
+}
+
+export function exportQuotesCSV(quotes: QuoteSnapshot[]) {
+  const header = ["Categoria", "Ativo", "Simbolo", "Moeda", "Preco", "Preco_BRL", "Variacao_24h_%", "Max_24h", "Min_24h", "Atualizado"];
+  const rows = quotes.map((q) => [
+    q.category, q.name, q.symbol, q.currency,
+    q.price ?? "", q.priceBRL ?? "", q.changePercent ?? "",
+    q.high24h ?? "", q.low24h ?? "",
+    new Date(q.updatedAt).toLocaleString("pt-BR"),
+  ]);
+  const csv = [header, ...rows].map((r) => r.map(csvEscape).join(";")).join("\n");
+  const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+  download(blob, `cotacoes-${Date.now()}.csv`);
+}
+
 export async function exportAssetPDF(
   name: string,
   symbol: string,

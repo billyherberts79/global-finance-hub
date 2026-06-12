@@ -1,7 +1,7 @@
 import { createFileRoute, Link, notFound, useRouter } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { ArrowLeft, Download, FileText } from "lucide-react";
+import { ArrowLeft, Download, FileText, FileSpreadsheet } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -18,9 +18,9 @@ import {
 import { Header } from "@/components/Header";
 import { getHistory, getQuotes } from "@/lib/api/finance.functions";
 import { findAsset } from "@/lib/finance/assets";
-import { exportAssetPDF, exportHistoryXLSX } from "@/lib/finance/exports";
+import { exportAssetPDF, exportHistoryCSV, exportHistoryXLSX } from "@/lib/finance/exports";
 import { forecast } from "@/lib/finance/forecast";
-import { fmtBRL, fmtCurrency, fmtDate, fmtPercent } from "@/lib/finance/format";
+import { fmtBRL, fmtDate, fmtPercent, fmtPrice } from "@/lib/finance/format";
 import { ema, sma } from "@/lib/finance/indicators";
 
 export const Route = createFileRoute("/ativo/$slug")({
@@ -64,6 +64,12 @@ const RANGES: { value: Range; label: string }[] = [
   { value: "5y", label: "5A" },
 ];
 
+type Interval = "1d" | "1wk";
+const INTERVALS: { value: Interval; label: string }[] = [
+  { value: "1d", label: "Diário" },
+  { value: "1wk", label: "Semanal" },
+];
+
 const HORIZONS = [7, 15, 30, 60, 90] as const;
 const MA_PERIODS = [9, 21, 50, 100, 200] as const;
 
@@ -76,6 +82,7 @@ function AssetDetail() {
   const fetchQuotes = useServerFn(getQuotes);
 
   const [range, setRange] = useState<Range>("1y");
+  const [interval, setIntervalState] = useState<Interval>("1d");
   const [horizon, setHorizon] = useState<(typeof HORIZONS)[number]>(30);
   const [showSMA, setShowSMA] = useState<number | null>(50);
   const [showEMA, setShowEMA] = useState<number | null>(21);
@@ -89,8 +96,8 @@ function AssetDetail() {
   const usdBrl = quotesQuery.data?.fxRates.USD ?? null;
 
   const historyQuery = useQuery({
-    queryKey: ["history", slug, range],
-    queryFn: () => fetchHistory({ data: { slug, range } }),
+    queryKey: ["history", slug, range, interval],
+    queryFn: () => fetchHistory({ data: { slug, range, interval } }),
     staleTime: 300_000,
   });
 
@@ -166,6 +173,15 @@ function AssetDetail() {
       toast.error("Falha ao gerar Excel", { description: String(e) });
     }
   };
+  const handleExportCSV = () => {
+    if (!historyQuery.data) return;
+    try {
+      exportHistoryCSV(asset.name, asset.symbol, asset.currency, historyQuery.data.candles, fxToBRL);
+      toast.success("CSV gerado");
+    } catch (e) {
+      toast.error("Falha ao gerar CSV", { description: String(e) });
+    }
+  };
 
   const positive = (quote?.changePercent ?? 0) >= 0;
 
@@ -186,11 +202,11 @@ function AssetDetail() {
             <div className="flex flex-wrap justify-between items-start gap-4 mb-6">
               <div>
                 <span className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em]">{asset.symbol}</span>
-                <h1 className="font-display text-3xl font-bold tracking-tight mt-1">{asset.name}</h1>
+                <h1 className="font-display text-4xl font-bold tracking-tight mt-1 text-foreground" style={{ textShadow: "0 0 24px color-mix(in oklab, var(--brand-accent) 35%, transparent)" }}>{asset.name}</h1>
                 {quote?.price != null && (
                   <div className="flex items-baseline gap-3 mt-3">
-                    <span className="text-3xl font-display font-bold tabular-nums">{fmtCurrency(quote.price, asset.currency)}</span>
-                    {asset.currency !== "BRL" && (
+                    <span className="text-3xl font-display font-bold tabular-nums">{fmtPrice(quote.price, asset.currency, asset.category)}</span>
+                    {asset.currency !== "BRL" && asset.category !== "indices" && (
                       <span className="text-base text-brand-muted tabular-nums">{fmtBRL(quote.priceBRL)}</span>
                     )}
                     {quote.changePercent != null && (
@@ -205,25 +221,43 @@ function AssetDetail() {
                 <button onClick={handleExportPDF} disabled={!historyQuery.data} className="px-3 py-2 bg-brand-surface-2 border border-brand-border hover:border-brand-accent/50 text-xs font-bold rounded transition-colors uppercase tracking-widest flex items-center gap-2 disabled:opacity-50">
                   <FileText className="size-3.5" /> PDF
                 </button>
+                <button onClick={handleExportCSV} disabled={!historyQuery.data} className="px-3 py-2 bg-brand-surface-2 border border-brand-border hover:border-brand-accent/50 text-xs font-bold rounded transition-colors uppercase tracking-widest flex items-center gap-2 disabled:opacity-50">
+                  <FileSpreadsheet className="size-3.5" /> CSV
+                </button>
                 <button onClick={handleExportXLSX} disabled={!historyQuery.data} className="px-3 py-2 bg-brand-accent hover:bg-brand-accent/90 text-xs font-bold text-white rounded transition-colors uppercase tracking-widest flex items-center gap-2 disabled:opacity-50">
                   <Download className="size-3.5" /> Excel
                 </button>
               </div>
             </div>
 
-            {/* Range selector */}
-            <div className="flex flex-wrap gap-1 mb-4">
-              {RANGES.map((r) => (
-                <button
-                  key={r.value}
-                  onClick={() => setRange(r.value)}
-                  className={`px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded transition-colors ${
-                    range === r.value ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted hover:text-foreground"
-                  }`}
-                >
-                  {r.label}
-                </button>
-              ))}
+            {/* Range + Interval selectors */}
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+              <div className="flex flex-wrap gap-1">
+                {RANGES.map((r) => (
+                  <button
+                    key={r.value}
+                    onClick={() => setRange(r.value)}
+                    className={`px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded transition-colors ${
+                      range === r.value ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted hover:text-foreground"
+                    }`}
+                  >
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-1 border border-brand-border rounded p-0.5">
+                {INTERVALS.map((iv) => (
+                  <button
+                    key={iv.value}
+                    onClick={() => setIntervalState(iv.value)}
+                    className={`px-3 py-1 text-[11px] font-bold uppercase tracking-wider rounded transition-colors ${
+                      interval === iv.value ? "bg-brand-accent text-white" : "text-brand-muted hover:text-foreground"
+                    }`}
+                  >
+                    {iv.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Chart */}
@@ -233,20 +267,29 @@ function AssetDetail() {
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                    <defs>
+                      <filter id="chartGlow" x="-20%" y="-20%" width="140%" height="140%">
+                        <feGaussianBlur stdDeviation="2.5" result="blur" />
+                        <feMerge>
+                          <feMergeNode in="blur" />
+                          <feMergeNode in="SourceGraphic" />
+                        </feMerge>
+                      </filter>
+                    </defs>
                     <CartesianGrid stroke="var(--brand-border)" strokeDasharray="3 3" vertical={false} />
                     <XAxis dataKey="date" tick={{ fill: "var(--brand-muted)", fontSize: 10 }} minTickGap={40} stroke="var(--brand-border)" />
-                    <YAxis tick={{ fill: "var(--brand-muted)", fontSize: 10 }} domain={["auto", "auto"]} stroke="var(--brand-border)" width={70} tickFormatter={(v) => fmtCurrency(v, asset.currency).replace(/\s/g, "")} />
+                    <YAxis tick={{ fill: "var(--brand-muted)", fontSize: 10 }} domain={["auto", "auto"]} stroke="var(--brand-border)" width={70} tickFormatter={(v) => fmtPrice(v, asset.currency, asset.category).replace(/\s/g, "")} />
                     <Tooltip
                       contentStyle={{ background: "var(--brand-bg)", border: "1px solid var(--brand-border)", fontSize: 12 }}
                       labelStyle={{ color: "var(--brand-muted)" }}
                       formatter={(value, name) => {
                         const n = typeof value === "number" ? value : Number(value);
-                        return [Number.isFinite(n) ? fmtCurrency(n, asset.currency) : "—", String(name)];
+                        return [Number.isFinite(n) ? fmtPrice(n, asset.currency, asset.category) : "—", String(name)];
                       }}
                     />
                     {/* Forecast confidence band */}
                     <Area type="monotone" dataKey="band" stroke="none" fill="var(--brand-accent)" fillOpacity={0.12} isAnimationActive={false} />
-                    <Line type="monotone" dataKey="close" name="Preço" stroke="var(--brand-accent)" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                    <Line type="monotone" dataKey="close" name="Preço" stroke="var(--brand-accent)" strokeWidth={2} dot={false} isAnimationActive={false} filter="url(#chartGlow)" />
                     {showSMA && <Line type="monotone" dataKey="sma" name={`SMA ${showSMA}`} stroke="#f59e0b" strokeWidth={1} dot={false} isAnimationActive={false} />}
                     {showEMA && <Line type="monotone" dataKey="ema" name={`EMA ${showEMA}`} stroke="#a855f7" strokeWidth={1} dot={false} isAnimationActive={false} />}
                     <Line type="monotone" dataKey="yhat" name="Previsão" stroke="var(--brand-accent)" strokeDasharray="4 4" strokeWidth={1.5} dot={false} isAnimationActive={false} />
@@ -285,12 +328,12 @@ function AssetDetail() {
             <h3 className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-3">Estatísticas do período</h3>
             {stats ? (
               <dl className="space-y-2 text-sm">
-                <Stat label="Abertura" value={fmtCurrency(stats.open, asset.currency)} />
-                <Stat label="Fechamento" value={fmtCurrency(stats.close, asset.currency)} />
-                <Stat label="Máxima" value={fmtCurrency(stats.max, asset.currency)} />
-                <Stat label="Mínima" value={fmtCurrency(stats.min, asset.currency)} />
+                <Stat label="Abertura" value={fmtPrice(stats.open, asset.currency, asset.category)} />
+                <Stat label="Fechamento" value={fmtPrice(stats.close, asset.currency, asset.category)} />
+                <Stat label="Máxima" value={fmtPrice(stats.max, asset.currency, asset.category)} />
+                <Stat label="Mínima" value={fmtPrice(stats.min, asset.currency, asset.category)} />
                 <Stat label="Variação" value={fmtPercent(stats.variation)} highlight={stats.variation >= 0 ? "pos" : "neg"} />
-                {asset.currency !== "BRL" && <Stat label="Fechamento BRL" value={fmtBRL(stats.close * fxToBRL)} />}
+                {asset.currency !== "BRL" && asset.category !== "indices" && <Stat label="Fechamento BRL" value={fmtBRL(stats.close * fxToBRL)} />}
               </dl>
             ) : (
               <div className="text-brand-muted text-sm">—</div>
@@ -311,14 +354,28 @@ function AssetDetail() {
               <div className="space-y-3">
                 <div className="flex justify-between text-xs">
                   <span className="text-brand-muted">Projeção</span>
-                  <span className="font-bold tabular-nums">{fmtCurrency(fc.points[fc.points.length - 1].yhat, asset.currency)}</span>
+                  <span className="font-bold tabular-nums">{fmtPrice(fc.points[fc.points.length - 1].yhat, asset.currency, asset.category)}</span>
                 </div>
+                {asset.currency !== "BRL" && asset.category !== "indices" && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-brand-muted">Projeção (BRL)</span>
+                    <span className="font-bold tabular-nums text-brand-accent">{fmtBRL(fc.points[fc.points.length - 1].yhat * fxToBRL)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-xs">
                   <span className="text-brand-muted">Intervalo 95%</span>
                   <span className="tabular-nums text-[11px]">
-                    {fmtCurrency(fc.points[fc.points.length - 1].lower, asset.currency)} — {fmtCurrency(fc.points[fc.points.length - 1].upper, asset.currency)}
+                    {fmtPrice(fc.points[fc.points.length - 1].lower, asset.currency, asset.category)} — {fmtPrice(fc.points[fc.points.length - 1].upper, asset.currency, asset.category)}
                   </span>
                 </div>
+                {asset.currency !== "BRL" && asset.category !== "indices" && (
+                  <div className="flex justify-between text-xs">
+                    <span className="text-brand-muted">Intervalo (BRL)</span>
+                    <span className="tabular-nums text-[11px]">
+                      {fmtBRL(fc.points[fc.points.length - 1].lower * fxToBRL)} — {fmtBRL(fc.points[fc.points.length - 1].upper * fxToBRL)}
+                    </span>
+                  </div>
+                )}
                 <div>
                   <div className="flex justify-between text-xs mb-1">
                     <span className="text-brand-muted">Confiança</span>

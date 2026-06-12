@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 
 import type { QuoteSnapshot } from "@/lib/api/finance.functions";
-import { fmtBRL, fmtCurrency, fmtPercent } from "@/lib/finance/format";
+import { fmtBRL, fmtPercent, fmtPrice } from "@/lib/finance/format";
 
 import { Sparkline } from "./Sparkline";
 
@@ -18,16 +18,18 @@ export function AssetCard({ q }: { q: QuoteSnapshot }) {
           <span className="text-[10px] font-bold text-brand-muted uppercase tracking-wider block truncate">
             {q.symbol}
           </span>
-          <div className="text-lg font-display font-bold tabular-nums truncate">
-            {fmtCurrency(q.price, q.currency)}
+          <div className="text-xl font-display font-bold tracking-tight text-foreground truncate mt-0.5">
+            {q.name}
           </div>
-          <div className="text-xs text-brand-muted truncate">{q.name}</div>
+          <div className="text-base font-display font-semibold tabular-nums truncate text-brand-muted mt-1">
+            {fmtPrice(q.price, q.currency, q.category)}
+          </div>
         </div>
         <div className={`text-sm font-medium tabular-nums shrink-0 ${positive ? "text-brand-positive" : "text-brand-negative"}`}>
           {q.changePercent != null ? `${positive ? "+" : ""}${q.changePercent.toFixed(2)}%` : "—"}
         </div>
       </div>
-      {q.currency !== "BRL" && (
+      {q.currency !== "BRL" && q.category !== "indices" && (
         <div className="text-xs text-brand-muted/80 mb-3 tabular-nums">{fmtBRL(q.priceBRL)}</div>
       )}
       {q.currency === "BRL" && q.changePercent != null && (

@@ -1,7 +1,7 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
-import { Download, RefreshCw } from "lucide-react";
+import { Download, FileSpreadsheet, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -9,7 +9,7 @@ import { AssetCard } from "@/components/AssetCard";
 import { Header } from "@/components/Header";
 import { getQuotes } from "@/lib/api/finance.functions";
 import { CATEGORY_LABEL, type AssetCategory } from "@/lib/finance/assets";
-import { exportQuotesXLSX } from "@/lib/finance/exports";
+import { exportQuotesCSV, exportQuotesXLSX } from "@/lib/finance/exports";
 import { fmtDateTime } from "@/lib/finance/format";
 
 export const Route = createFileRoute("/")({
@@ -50,6 +50,11 @@ function Dashboard() {
       setExporting(false);
     }
   };
+  const handleExportCSV = () => {
+    if (!data) return;
+    try { exportQuotesCSV(data.quotes); toast.success("CSV gerado"); }
+    catch (e) { toast.error("Falha ao gerar CSV", { description: String(e) }); }
+  };
 
   const handleRefresh = () => {
     refetch();
@@ -84,6 +89,14 @@ function Dashboard() {
           >
             <RefreshCw className={`size-3.5 ${isFetching ? "animate-spin" : ""}`} />
             Atualizar
+          </button>
+          <button
+            onClick={handleExportCSV}
+            disabled={!data}
+            className="px-3 py-2 bg-brand-surface border border-brand-border hover:border-brand-accent/50 text-xs font-bold rounded transition-colors uppercase tracking-widest flex items-center gap-2 disabled:opacity-50"
+          >
+            <FileSpreadsheet className="size-3.5" />
+            CSV
           </button>
           <button
             onClick={handleExport}
