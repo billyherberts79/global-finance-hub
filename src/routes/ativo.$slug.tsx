@@ -86,6 +86,7 @@ function AssetDetail() {
   const [horizon, setHorizon] = useState<(typeof HORIZONS)[number]>(30);
   const [showSMA, setShowSMA] = useState<number | null>(50);
   const [showEMA, setShowEMA] = useState<number | null>(21);
+  const [showEMA2, setShowEMA2] = useState<number | null>(null);
 
   const quotesQuery = useQuery({
     queryKey: ["quotes"],
@@ -104,6 +105,7 @@ function AssetDetail() {
   const closes = historyQuery.data?.candles.map((c) => c.close) ?? [];
   const smaSeries = useMemo(() => (showSMA ? sma(closes, showSMA) : null), [closes, showSMA]);
   const emaSeries = useMemo(() => (showEMA ? ema(closes, showEMA) : null), [closes, showEMA]);
+  const ema2Series = useMemo(() => (showEMA2 ? ema(closes, showEMA2) : null), [closes, showEMA2]);
   const fxToBRL = historyQuery.data?.fxToBRL ?? 1;
 
   const fc = useMemo(() => {
@@ -119,6 +121,7 @@ function AssetDetail() {
       close: c.close,
       sma: smaSeries?.[i] ?? null,
       ema: emaSeries?.[i] ?? null,
+      ema2: ema2Series?.[i] ?? null,
       yhat: null as number | null,
       band: null as [number, number] | null,
     }));
@@ -132,6 +135,7 @@ function AssetDetail() {
           close: null as unknown as number,
           sma: null,
           ema: null,
+          ema2: null,
           yhat: p.yhat,
           band: [p.lower, p.upper],
         });
@@ -292,6 +296,7 @@ function AssetDetail() {
                     <Line type="monotone" dataKey="close" name="Preço" stroke="var(--brand-accent)" strokeWidth={2} dot={false} isAnimationActive={false} filter="url(#chartGlow)" />
                     {showSMA && <Line type="monotone" dataKey="sma" name={`SMA ${showSMA}`} stroke="#f59e0b" strokeWidth={1} dot={false} isAnimationActive={false} />}
                     {showEMA && <Line type="monotone" dataKey="ema" name={`EMA ${showEMA}`} stroke="#a855f7" strokeWidth={1} dot={false} isAnimationActive={false} />}
+                    {showEMA2 && <Line type="monotone" dataKey="ema2" name={`EMA ${showEMA2}`} stroke="#06b6d4" strokeWidth={1} dot={false} isAnimationActive={false} />}
                     <Line type="monotone" dataKey="yhat" name="Previsão" stroke="var(--brand-accent)" strokeDasharray="4 4" strokeWidth={1.5} dot={false} isAnimationActive={false} />
                   </ComposedChart>
                 </ResponsiveContainer>
@@ -299,7 +304,7 @@ function AssetDetail() {
             </div>
 
             {/* MA selectors */}
-            <div className="mt-6 grid sm:grid-cols-2 gap-6">
+            <div className="mt-6 grid sm:grid-cols-3 gap-6">
               <div>
                 <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2">SMA</div>
                 <div className="flex flex-wrap gap-1">
@@ -310,11 +315,20 @@ function AssetDetail() {
                 </div>
               </div>
               <div>
-                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2">EMA</div>
+                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2">EMA 1</div>
                 <div className="flex flex-wrap gap-1">
                   <button onClick={() => setShowEMA(null)} className={`px-2 py-1 text-[11px] rounded ${!showEMA ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted"}`}>Off</button>
                   {MA_PERIODS.map((p) => (
                     <button key={p} onClick={() => setShowEMA(p)} className={`px-2 py-1 text-[11px] rounded tabular-nums ${showEMA === p ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted hover:text-foreground"}`}>{p}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2">EMA 2</div>
+                <div className="flex flex-wrap gap-1">
+                  <button onClick={() => setShowEMA2(null)} className={`px-2 py-1 text-[11px] rounded ${!showEMA2 ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted"}`}>Off</button>
+                  {MA_PERIODS.map((p) => (
+                    <button key={p} onClick={() => setShowEMA2(p)} className={`px-2 py-1 text-[11px] rounded tabular-nums ${showEMA2 === p ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted hover:text-foreground"}`}>{p}</button>
                   ))}
                 </div>
               </div>
