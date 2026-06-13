@@ -315,7 +315,7 @@ function AssetDetail() {
             {/* MA selectors */}
             <div className="mt-6 grid sm:grid-cols-3 gap-6">
               <div>
-                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2">SMA</div>
+                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2 flex items-center"><ColorDot color="#f59e0b" />SMA</div>
                 <div className="flex flex-wrap gap-1">
                   <button onClick={() => setShowSMA(null)} className={`px-2 py-1 text-[11px] rounded ${!showSMA ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted"}`}>Off</button>
                   {MA_PERIODS.map((p) => (
