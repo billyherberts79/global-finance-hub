@@ -135,6 +135,7 @@ function AssetDetail() {
           close: null as unknown as number,
           sma: null,
           ema: null,
+          ema2: null,
           yhat: p.yhat,
           band: [p.lower, p.upper],
         });
