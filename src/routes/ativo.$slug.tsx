@@ -2,6 +2,15 @@ import { createFileRoute, Link, notFound, useRouter } from "@tanstack/react-rout
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, Download, FileText, FileSpreadsheet } from "lucide-react";
+
+function ColorDot({ color }: { color: string }) {
+  return (
+    <span
+      className="inline-block size-2 rounded-full mr-1.5 align-middle"
+      style={{ backgroundColor: color }}
+    />
+  );
+}
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
@@ -306,7 +315,7 @@ function AssetDetail() {
             {/* MA selectors */}
             <div className="mt-6 grid sm:grid-cols-3 gap-6">
               <div>
-                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2">SMA</div>
+                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2 flex items-center"><ColorDot color="#f59e0b" />SMA</div>
                 <div className="flex flex-wrap gap-1">
                   <button onClick={() => setShowSMA(null)} className={`px-2 py-1 text-[11px] rounded ${!showSMA ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted"}`}>Off</button>
                   {MA_PERIODS.map((p) => (
@@ -315,7 +324,7 @@ function AssetDetail() {
                 </div>
               </div>
               <div>
-                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2">EMA 1</div>
+                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2 flex items-center"><ColorDot color="#a855f7" />EMA 1</div>
                 <div className="flex flex-wrap gap-1">
                   <button onClick={() => setShowEMA(null)} className={`px-2 py-1 text-[11px] rounded ${!showEMA ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted"}`}>Off</button>
                   {MA_PERIODS.map((p) => (
@@ -324,7 +333,7 @@ function AssetDetail() {
                 </div>
               </div>
               <div>
-                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2">EMA 2</div>
+                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2 flex items-center"><ColorDot color="#06b6d4" />EMA 2</div>
                 <div className="flex flex-wrap gap-1">
                   <button onClick={() => setShowEMA2(null)} className={`px-2 py-1 text-[11px] rounded ${!showEMA2 ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted"}`}>Off</button>
                   {MA_PERIODS.map((p) => (
