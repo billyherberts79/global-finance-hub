@@ -2,6 +2,15 @@ import { createFileRoute, Link, notFound, useRouter } from "@tanstack/react-rout
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { ArrowLeft, Download, FileText, FileSpreadsheet } from "lucide-react";
+
+function ColorDot({ color }: { color: string }) {
+  return (
+    <span
+      className="inline-block size-2 rounded-full mr-1.5 align-middle"
+      style={{ backgroundColor: color }}
+    />
+  );
+}
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 import {
