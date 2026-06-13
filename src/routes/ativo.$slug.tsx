@@ -86,6 +86,7 @@ function AssetDetail() {
   const [horizon, setHorizon] = useState<(typeof HORIZONS)[number]>(30);
   const [showSMA, setShowSMA] = useState<number | null>(50);
   const [showEMA, setShowEMA] = useState<number | null>(21);
+  const [showEMA2, setShowEMA2] = useState<number | null>(null);
 
   const quotesQuery = useQuery({
     queryKey: ["quotes"],
