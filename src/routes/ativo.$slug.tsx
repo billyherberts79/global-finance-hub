@@ -296,6 +296,7 @@ function AssetDetail() {
                     <Line type="monotone" dataKey="close" name="Preço" stroke="var(--brand-accent)" strokeWidth={2} dot={false} isAnimationActive={false} filter="url(#chartGlow)" />
                     {showSMA && <Line type="monotone" dataKey="sma" name={`SMA ${showSMA}`} stroke="#f59e0b" strokeWidth={1} dot={false} isAnimationActive={false} />}
                     {showEMA && <Line type="monotone" dataKey="ema" name={`EMA ${showEMA}`} stroke="#a855f7" strokeWidth={1} dot={false} isAnimationActive={false} />}
+                    {showEMA2 && <Line type="monotone" dataKey="ema2" name={`EMA ${showEMA2}`} stroke="#06b6d4" strokeWidth={1} dot={false} isAnimationActive={false} />}
                     <Line type="monotone" dataKey="yhat" name="Previsão" stroke="var(--brand-accent)" strokeDasharray="4 4" strokeWidth={1.5} dot={false} isAnimationActive={false} />
                   </ComposedChart>
                 </ResponsiveContainer>
