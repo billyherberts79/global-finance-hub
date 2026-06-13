@@ -105,6 +105,7 @@ function AssetDetail() {
   const closes = historyQuery.data?.candles.map((c) => c.close) ?? [];
   const smaSeries = useMemo(() => (showSMA ? sma(closes, showSMA) : null), [closes, showSMA]);
   const emaSeries = useMemo(() => (showEMA ? ema(closes, showEMA) : null), [closes, showEMA]);
+  const ema2Series = useMemo(() => (showEMA2 ? ema(closes, showEMA2) : null), [closes, showEMA2]);
   const fxToBRL = historyQuery.data?.fxToBRL ?? 1;
 
   const fc = useMemo(() => {
