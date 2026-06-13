@@ -304,7 +304,7 @@ function AssetDetail() {
             </div>
 
             {/* MA selectors */}
-            <div className="mt-6 grid sm:grid-cols-2 gap-6">
+            <div className="mt-6 grid sm:grid-cols-3 gap-6">
               <div>
                 <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2">SMA</div>
                 <div className="flex flex-wrap gap-1">
@@ -315,11 +315,20 @@ function AssetDetail() {
                 </div>
               </div>
               <div>
-                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2">EMA</div>
+                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2">EMA 1</div>
                 <div className="flex flex-wrap gap-1">
                   <button onClick={() => setShowEMA(null)} className={`px-2 py-1 text-[11px] rounded ${!showEMA ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted"}`}>Off</button>
                   {MA_PERIODS.map((p) => (
                     <button key={p} onClick={() => setShowEMA(p)} className={`px-2 py-1 text-[11px] rounded tabular-nums ${showEMA === p ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted hover:text-foreground"}`}>{p}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2">EMA 2</div>
+                <div className="flex flex-wrap gap-1">
+                  <button onClick={() => setShowEMA2(null)} className={`px-2 py-1 text-[11px] rounded ${!showEMA2 ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted"}`}>Off</button>
+                  {MA_PERIODS.map((p) => (
+                    <button key={p} onClick={() => setShowEMA2(p)} className={`px-2 py-1 text-[11px] rounded tabular-nums ${showEMA2 === p ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted hover:text-foreground"}`}>{p}</button>
                   ))}
                 </div>
               </div>
