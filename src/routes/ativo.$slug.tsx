@@ -121,6 +121,7 @@ function AssetDetail() {
       close: c.close,
       sma: smaSeries?.[i] ?? null,
       ema: emaSeries?.[i] ?? null,
+      ema2: ema2Series?.[i] ?? null,
       yhat: null as number | null,
       band: null as [number, number] | null,
     }));
