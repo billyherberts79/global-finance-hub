@@ -20,7 +20,7 @@ function log(level: "info" | "warn" | "error", scope: string, msg: string, extra
 
 async function fetchJson<T>(url: string, opts: { timeoutMs?: number; retries?: number } = {}): Promise<T> {
   const timeoutMs = opts.timeoutMs ?? 6000;
-  const retries = opts.retries ?? 1;
+  const retries = opts.retries ?? 3;
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const ctrl = new AbortController();
@@ -34,7 +34,17 @@ async function fetchJson<T>(url: string, opts: { timeoutMs?: number; retries?: n
         },
       });
       clearTimeout(timer);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        if ((res.status === 429 || res.status >= 500) && attempt < retries) {
+          const retryAfter = Number(res.headers.get("retry-after"));
+          const wait = Number.isFinite(retryAfter) && retryAfter > 0
+            ? retryAfter * 1000
+            : Math.min(8000, 800 * Math.pow(2, attempt)) + Math.random() * 300;
+          await new Promise((r) => setTimeout(r, wait));
+          continue;
+        }
+        throw new Error(`HTTP ${res.status}`);
+      }
       return (await res.json()) as T;
     } catch (err) {
       clearTimeout(timer);
@@ -109,9 +119,10 @@ interface CGMarketChart {
   total_volumes: [number, number][];
 }
 
-async function coingeckoMarketChart(id: string, days: number): Promise<CGMarketChart> {
-  const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}&interval=daily`;
-  return await fetchJson<CGMarketChart>(url, { timeoutMs: 8000, retries: 1 });
+async function coingeckoMarketChart(id: string, days: number, daily = true): Promise<CGMarketChart> {
+  const intervalParam = daily ? "&interval=daily" : "";
+  const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}${intervalParam}`;
+  return await fetchJson<CGMarketChart>(url, { timeoutMs: 8000, retries: 3 });
 }
 
 // =============================================================================
@@ -308,7 +319,7 @@ export const getHistory = createServerFn({ method: "GET" })
       const days = isIntraday
         ? (data.interval === "5m" ? 1 : data.interval === "15m" ? 2 : data.interval === "1h" ? 14 : 60)
         : (data.range === "1mo" ? 30 : data.range === "3mo" ? 90 : data.range === "6mo" ? 180 : data.range === "1y" ? 365 : 730);
-      const chart = await coingeckoMarketChart(asset.apiId, days);
+      const chart = await coingeckoMarketChart(asset.apiId, days, !isIntraday);
       let daily = chart.prices.map(([t, p]) => ({ t, open: null, high: null, low: null, close: p, volume: null } as HistoryCandle));
       if (data.interval === "15m" || data.interval === "3h") {
         // Aggregate every 3 source points (5m→15m or 1h→3h)
