@@ -119,9 +119,10 @@ interface CGMarketChart {
   total_volumes: [number, number][];
 }
 
-async function coingeckoMarketChart(id: string, days: number): Promise<CGMarketChart> {
-  const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}&interval=daily`;
-  return await fetchJson<CGMarketChart>(url, { timeoutMs: 8000, retries: 1 });
+async function coingeckoMarketChart(id: string, days: number, daily = true): Promise<CGMarketChart> {
+  const intervalParam = daily ? "&interval=daily" : "";
+  const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}${intervalParam}`;
+  return await fetchJson<CGMarketChart>(url, { timeoutMs: 8000, retries: 3 });
 }
 
 // =============================================================================
