@@ -319,7 +319,7 @@ export const getHistory = createServerFn({ method: "GET" })
       const days = isIntraday
         ? (data.interval === "5m" ? 1 : data.interval === "15m" ? 2 : data.interval === "1h" ? 14 : 60)
         : (data.range === "1mo" ? 30 : data.range === "3mo" ? 90 : data.range === "6mo" ? 180 : data.range === "1y" ? 365 : 730);
-      const chart = await coingeckoMarketChart(asset.apiId, days);
+      const chart = await coingeckoMarketChart(asset.apiId, days, !isIntraday);
       let daily = chart.prices.map(([t, p]) => ({ t, open: null, high: null, low: null, close: p, volume: null } as HistoryCandle));
       if (data.interval === "15m" || data.interval === "3h") {
         // Aggregate every 3 source points (5m→15m or 1h→3h)
