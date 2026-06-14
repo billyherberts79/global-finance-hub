@@ -29,7 +29,7 @@ import { getHistory, getQuotes } from "@/lib/api/finance.functions";
 import { findAsset } from "@/lib/finance/assets";
 import { exportAssetPDF, exportHistoryCSV, exportHistoryXLSX } from "@/lib/finance/exports";
 import { forecast } from "@/lib/finance/forecast";
-import { fmtBRL, fmtDate, fmtPercent, fmtPrice } from "@/lib/finance/format";
+import { fmtBRL, fmtDate, fmtDateTime, fmtPercent, fmtPrice } from "@/lib/finance/format";
 import { ema, sma } from "@/lib/finance/indicators";
 
 export const Route = createFileRoute("/ativo/$slug")({
@@ -127,9 +127,11 @@ function AssetDetail() {
 
   const chartData = useMemo(() => {
     if (!historyQuery.data) return [];
+    const isIntraday = interval === "5m" || interval === "15m" || interval === "1h" || interval === "3h";
+    const labelOf = (t: number) => (isIntraday ? fmtDateTime(t) : fmtDate(t));
     const hist = historyQuery.data.candles.map((c, i) => ({
       t: c.t,
-      date: fmtDate(c.t),
+      date: labelOf(c.t),
       close: c.close,
       sma: smaSeries?.[i] ?? null,
       ema: emaSeries?.[i] ?? null,
@@ -143,7 +145,7 @@ function AssetDetail() {
       for (const p of fc.points) {
         hist.push({
           t: p.t,
-          date: fmtDate(p.t),
+          date: labelOf(p.t),
           close: null as unknown as number,
           sma: null,
           ema: null,
@@ -154,7 +156,7 @@ function AssetDetail() {
       }
     }
     return hist;
-  }, [historyQuery.data, smaSeries, emaSeries, fc]);
+  }, [historyQuery.data, smaSeries, emaSeries, ema2Series, fc, interval]);
 
   const stats = useMemo(() => {
     if (!historyQuery.data?.candles.length) return null;
