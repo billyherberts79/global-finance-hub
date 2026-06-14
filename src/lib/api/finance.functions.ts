@@ -20,7 +20,7 @@ function log(level: "info" | "warn" | "error", scope: string, msg: string, extra
 
 async function fetchJson<T>(url: string, opts: { timeoutMs?: number; retries?: number } = {}): Promise<T> {
   const timeoutMs = opts.timeoutMs ?? 6000;
-  const retries = opts.retries ?? 1;
+  const retries = opts.retries ?? 3;
   let lastErr: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     const ctrl = new AbortController();
@@ -34,7 +34,17 @@ async function fetchJson<T>(url: string, opts: { timeoutMs?: number; retries?: n
         },
       });
       clearTimeout(timer);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        if ((res.status === 429 || res.status >= 500) && attempt < retries) {
+          const retryAfter = Number(res.headers.get("retry-after"));
+          const wait = Number.isFinite(retryAfter) && retryAfter > 0
+            ? retryAfter * 1000
+            : Math.min(8000, 800 * Math.pow(2, attempt)) + Math.random() * 300;
+          await new Promise((r) => setTimeout(r, wait));
+          continue;
+        }
+        throw new Error(`HTTP ${res.status}`);
+      }
       return (await res.json()) as T;
     } catch (err) {
       clearTimeout(timer);
