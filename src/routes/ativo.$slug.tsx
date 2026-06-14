@@ -29,7 +29,7 @@ import { getHistory, getQuotes } from "@/lib/api/finance.functions";
 import { findAsset } from "@/lib/finance/assets";
 import { exportAssetPDF, exportHistoryCSV, exportHistoryXLSX } from "@/lib/finance/exports";
 import { forecast } from "@/lib/finance/forecast";
-import { fmtBRL, fmtDate, fmtPercent, fmtPrice } from "@/lib/finance/format";
+import { fmtBRL, fmtDate, fmtDateTime, fmtPercent, fmtPrice } from "@/lib/finance/format";
 import { ema, sma } from "@/lib/finance/indicators";
 
 export const Route = createFileRoute("/ativo/$slug")({
@@ -63,18 +63,21 @@ export const Route = createFileRoute("/ativo/$slug")({
   },
 });
 
-type Range = "1mo" | "3mo" | "6mo" | "1y" | "2y" | "5y";
+type Range = "1mo" | "3mo" | "6mo" | "1y" | "2y";
 const RANGES: { value: Range; label: string }[] = [
   { value: "1mo", label: "1M" },
   { value: "3mo", label: "3M" },
   { value: "6mo", label: "6M" },
   { value: "1y", label: "1A" },
   { value: "2y", label: "2A" },
-  { value: "5y", label: "5A" },
 ];
 
-type Interval = "1d" | "1wk";
+type Interval = "5m" | "15m" | "1h" | "3h" | "1d" | "1wk";
 const INTERVALS: { value: Interval; label: string }[] = [
+  { value: "5m", label: "5min" },
+  { value: "15m", label: "15min" },
+  { value: "1h", label: "1h" },
+  { value: "3h", label: "3h" },
   { value: "1d", label: "Diário" },
   { value: "1wk", label: "Semanal" },
 ];
@@ -124,9 +127,11 @@ function AssetDetail() {
 
   const chartData = useMemo(() => {
     if (!historyQuery.data) return [];
+    const isIntraday = interval === "5m" || interval === "15m" || interval === "1h" || interval === "3h";
+    const labelOf = (t: number) => (isIntraday ? fmtDateTime(t) : fmtDate(t));
     const hist = historyQuery.data.candles.map((c, i) => ({
       t: c.t,
-      date: fmtDate(c.t),
+      date: labelOf(c.t),
       close: c.close,
       sma: smaSeries?.[i] ?? null,
       ema: emaSeries?.[i] ?? null,
@@ -140,7 +145,7 @@ function AssetDetail() {
       for (const p of fc.points) {
         hist.push({
           t: p.t,
-          date: fmtDate(p.t),
+          date: labelOf(p.t),
           close: null as unknown as number,
           sma: null,
           ema: null,
@@ -151,7 +156,7 @@ function AssetDetail() {
       }
     }
     return hist;
-  }, [historyQuery.data, smaSeries, emaSeries, fc]);
+  }, [historyQuery.data, smaSeries, emaSeries, ema2Series, fc, interval]);
 
   const stats = useMemo(() => {
     if (!historyQuery.data?.candles.length) return null;
