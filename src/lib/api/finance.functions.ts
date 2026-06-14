@@ -290,8 +290,8 @@ export const getQuotes = createServerFn({ method: "GET" }).handler(async (): Pro
 export const getHistory = createServerFn({ method: "GET" })
   .inputValidator(z.object({
     slug: z.string(),
-    range: z.enum(["1mo", "3mo", "6mo", "1y", "2y", "5y"]).default("1y"),
-    interval: z.enum(["1d", "1wk"]).default("1d"),
+    range: z.enum(["1mo", "3mo", "6mo", "1y", "2y"]).default("1y"),
+    interval: z.enum(["5m", "15m", "1h", "3h", "1d", "1wk"]).default("1d"),
   }))
   .handler(async ({ data }): Promise<HistoryResponse> => {
     const t0 = Date.now();
@@ -301,12 +301,32 @@ export const getHistory = createServerFn({ method: "GET" })
     const fxRates = await getFxRatesToBRL();
     const fx = fxRates[asset.currency] ?? 1;
 
+    const isIntraday = data.interval === "5m" || data.interval === "15m" || data.interval === "1h" || data.interval === "3h";
+
     let candles: HistoryCandle[] = [];
     if (asset.source === "coingecko") {
-      const days = data.range === "1mo" ? 30 : data.range === "3mo" ? 90 : data.range === "6mo" ? 180 : data.range === "1y" ? 365 : data.range === "2y" ? 730 : 1825;
+      const days = isIntraday
+        ? (data.interval === "5m" ? 1 : data.interval === "15m" ? 2 : data.interval === "1h" ? 14 : 60)
+        : (data.range === "1mo" ? 30 : data.range === "3mo" ? 90 : data.range === "6mo" ? 180 : data.range === "1y" ? 365 : 730);
       const chart = await coingeckoMarketChart(asset.apiId, days);
       let daily = chart.prices.map(([t, p]) => ({ t, open: null, high: null, low: null, close: p, volume: null } as HistoryCandle));
-      if (data.interval === "1wk") {
+      if (data.interval === "15m" || data.interval === "3h") {
+        // Aggregate every 3 source points (5m→15m or 1h→3h)
+        const out: HistoryCandle[] = [];
+        for (let i = 0; i < daily.length; i += 3) {
+          const chunk = daily.slice(i, i + 3);
+          if (!chunk.length) break;
+          out.push({
+            t: chunk[0].t,
+            open: chunk[0].close,
+            high: Math.max(...chunk.map((x) => x.close)),
+            low: Math.min(...chunk.map((x) => x.close)),
+            close: chunk[chunk.length - 1].close,
+            volume: null,
+          });
+        }
+        daily = out;
+      } else if (data.interval === "1wk") {
         // Aggregate by ISO week
         const weeks = new Map<string, HistoryCandle[]>();
         for (const c of daily) {
@@ -328,7 +348,12 @@ export const getHistory = createServerFn({ method: "GET" })
       }
       candles = daily;
     } else {
-      const yr = await yahooChart(asset.apiId, data.range, data.interval);
+      // Yahoo intraday: choose appropriate range + native interval (3h → aggregate from 60m)
+      const yahooInterval = data.interval === "3h" ? "60m" : data.interval === "1h" ? "60m" : data.interval;
+      const yahooRange = isIntraday
+        ? (data.interval === "5m" ? "5d" : data.interval === "15m" ? "1mo" : data.interval === "1h" ? "3mo" : "6mo")
+        : data.range;
+      const yr = await yahooChart(asset.apiId, yahooRange, yahooInterval);
       const r = yr.chart.result?.[0];
       const ts = r?.timestamp ?? [];
       const q = r?.indicators.quote[0];
@@ -344,6 +369,23 @@ export const getHistory = createServerFn({ method: "GET" })
           volume: q?.volume?.[i] ?? null,
         };
       }).filter((c): c is HistoryCandle => c !== null);
+
+      if (data.interval === "3h" && candles.length) {
+        const out: HistoryCandle[] = [];
+        for (let i = 0; i < candles.length; i += 3) {
+          const chunk = candles.slice(i, i + 3);
+          if (!chunk.length) break;
+          out.push({
+            t: chunk[0].t,
+            open: chunk[0].open ?? chunk[0].close,
+            high: Math.max(...chunk.map((x) => x.high ?? x.close)),
+            low: Math.min(...chunk.map((x) => x.low ?? x.close)),
+            close: chunk[chunk.length - 1].close,
+            volume: chunk.reduce((s, x) => s + (x.volume ?? 0), 0) || null,
+          });
+        }
+        candles = out;
+      }
     }
 
     log("info", "getHistory", "ok", { slug: data.slug, range: data.range, n: candles.length, ms: Date.now() - t0 });
