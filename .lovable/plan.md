@@ -1,13 +1,9 @@
 ## Plano
 
-Copiar os dois arquivos enviados para os caminhos indicados:
+Substituir o arquivo `src/routes/ativo.$slug.tsx` pelo conteúdo do arquivo enviado em `user-uploads://ativo.$slug.tsx`.
 
-1. `user-uploads://derivatives.ts` → `src/lib/finance/derivatives.ts`
-2. `user-uploads://derivatives.functions.ts` → `src/lib/api/derivatives.functions.ts`
+### Passos
+1. Copiar `user-uploads://ativo.$slug.tsx` para `src/routes/ativo.$slug.tsx` (com overwrite).
+2. Deixar o build automático validar imports (`@/lib/api/derivatives.functions` e `@/lib/finance/derivatives` já existem no projeto).
 
-Nenhum outro arquivo será alterado. Os arquivos serão copiados na íntegra usando `code--copy`, preservando o conteúdo original (imports já apontam para `../finance/derivatives`, compatível com a estrutura do projeto).
-
-Após a cópia, o build do TanStack roda automaticamente para validar que não há erros de tipo/import.
-
-### Observação
-Os arquivos ficam disponíveis para uso, mas ainda não estão conectados a nenhuma rota/componente da UI. Caso queira exibir os sinais de derivativos (funding rate, open interest) na página de ativo (BTC/ETH), isso pode ser feito em uma etapa seguinte.
+Nenhum outro arquivo será alterado.

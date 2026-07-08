@@ -25,8 +25,10 @@ import {
 } from "recharts";
 
 import { Header } from "@/components/Header";
+import { getDerivativesSignal } from "@/lib/api/derivatives.functions";
 import { getHistory, getQuotes } from "@/lib/api/finance.functions";
 import { findAsset } from "@/lib/finance/assets";
+import { hasFuturesSignal, LABEL_DESCRIPTION } from "@/lib/finance/derivatives";
 import { exportAssetPDF, exportHistoryCSV, exportHistoryXLSX } from "@/lib/finance/exports";
 import { forecast } from "@/lib/finance/forecast";
 import { fmtBRL, fmtDate, fmtDateTime, fmtPercent, fmtPrice } from "@/lib/finance/format";
@@ -42,7 +44,12 @@ export const Route = createFileRoute("/ativo/$slug")({
     return {
       meta: [
         { title },
-        { name: "description", content: a ? `Cotação, histórico, médias móveis e previsão para ${a.name}.` : "Detalhe de ativo." },
+        {
+          name: "description",
+          content: a
+            ? `Cotação, histórico, médias móveis e previsão para ${a.name}.`
+            : "Detalhe de ativo.",
+        },
         { property: "og:title", content: title },
       ],
     };
@@ -50,14 +57,19 @@ export const Route = createFileRoute("/ativo/$slug")({
   component: AssetDetail,
   notFoundComponent: () => (
     <div className="p-10 text-center text-brand-muted">
-      Ativo não encontrado. <Link to="/" className="text-brand-accent underline">Voltar</Link>
+      Ativo não encontrado.{" "}
+      <Link to="/" className="text-brand-accent underline">
+        Voltar
+      </Link>
     </div>
   ),
   errorComponent: ({ reset }) => {
     return (
       <div className="p-10 text-center">
         <p className="text-brand-negative mb-4">Falha ao carregar dados do ativo.</p>
-        <button onClick={reset} className="px-4 py-2 bg-brand-accent text-white rounded text-sm">Tentar novamente</button>
+        <button onClick={reset} className="px-4 py-2 bg-brand-accent text-white rounded text-sm">
+          Tentar novamente
+        </button>
       </div>
     );
   },
@@ -92,6 +104,7 @@ function AssetDetail() {
 
   const fetchHistory = useServerFn(getHistory);
   const fetchQuotes = useServerFn(getQuotes);
+  const fetchDerivativesSignal = useServerFn(getDerivativesSignal);
 
   const [range, setRange] = useState<Range>("1y");
   const [interval, setIntervalState] = useState<Interval>("1d");
@@ -114,6 +127,15 @@ function AssetDetail() {
     staleTime: 300_000,
   });
 
+  const derivativesQuery = useQuery({
+    queryKey: ["derivatives-signal", slug],
+    queryFn: () => fetchDerivativesSignal({ data: { slug } }),
+    enabled: hasFuturesSignal(slug),
+    staleTime: 5 * 60_000, // funding muda a cada 8h; 5min é conservador o suficiente
+    retry: 1,
+  });
+  const derivatives = derivativesQuery.data;
+
   const closes = historyQuery.data?.candles.map((c) => c.close) ?? [];
   const smaSeries = useMemo(() => (showSMA ? sma(closes, showSMA) : null), [closes, showSMA]);
   const emaSeries = useMemo(() => (showEMA ? ema(closes, showEMA) : null), [closes, showEMA]);
@@ -122,12 +144,16 @@ function AssetDetail() {
 
   const fc = useMemo(() => {
     if (!historyQuery.data) return null;
-    return forecast(historyQuery.data.candles.map((c) => ({ t: c.t, close: c.close })), horizon);
+    return forecast(
+      historyQuery.data.candles.map((c) => ({ t: c.t, close: c.close })),
+      horizon,
+    );
   }, [historyQuery.data, horizon]);
 
   const chartData = useMemo(() => {
     if (!historyQuery.data) return [];
-    const isIntraday = interval === "5m" || interval === "15m" || interval === "1h" || interval === "3h";
+    const isIntraday =
+      interval === "5m" || interval === "15m" || interval === "1h" || interval === "3h";
     const labelOf = (t: number) => (isIntraday ? fmtDateTime(t) : fmtDate(t));
     const hist = historyQuery.data.candles.map((c, i) => ({
       t: c.t,
@@ -168,7 +194,8 @@ function AssetDetail() {
     return {
       open: first.open ?? first.close,
       close: last.close,
-      max, min,
+      max,
+      min,
       variation: ((last.close - first.close) / first.close) * 100,
     };
   }, [historyQuery.data, closes]);
@@ -176,7 +203,13 @@ function AssetDetail() {
   const handleExportPDF = async () => {
     if (!historyQuery.data) return;
     try {
-      await exportAssetPDF(asset.name, asset.symbol, asset.currency, historyQuery.data.candles, fxToBRL);
+      await exportAssetPDF(
+        asset.name,
+        asset.symbol,
+        asset.currency,
+        historyQuery.data.candles,
+        fxToBRL,
+      );
       toast.success("PDF gerado");
     } catch (e) {
       toast.error("Falha ao gerar PDF", { description: String(e) });
@@ -185,7 +218,13 @@ function AssetDetail() {
   const handleExportXLSX = async () => {
     if (!historyQuery.data) return;
     try {
-      await exportHistoryXLSX(asset.name, asset.symbol, asset.currency, historyQuery.data.candles, fxToBRL);
+      await exportHistoryXLSX(
+        asset.name,
+        asset.symbol,
+        asset.currency,
+        historyQuery.data.candles,
+        fxToBRL,
+      );
       toast.success("Excel gerado");
     } catch (e) {
       toast.error("Falha ao gerar Excel", { description: String(e) });
@@ -194,7 +233,13 @@ function AssetDetail() {
   const handleExportCSV = () => {
     if (!historyQuery.data) return;
     try {
-      exportHistoryCSV(asset.name, asset.symbol, asset.currency, historyQuery.data.candles, fxToBRL);
+      exportHistoryCSV(
+        asset.name,
+        asset.symbol,
+        asset.currency,
+        historyQuery.data.candles,
+        fxToBRL,
+      );
       toast.success("CSV gerado");
     } catch (e) {
       toast.error("Falha ao gerar CSV", { description: String(e) });
@@ -219,30 +264,59 @@ function AssetDetail() {
           <div className="bg-brand-surface border border-brand-border rounded-lg p-6 mb-6">
             <div className="flex flex-wrap justify-between items-start gap-4 mb-6">
               <div>
-                <span className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em]">{asset.symbol}</span>
-                <h1 className="font-display text-4xl font-bold tracking-tight mt-1 text-foreground" style={{ textShadow: "0 0 24px color-mix(in oklab, var(--brand-accent) 35%, transparent)" }}>{asset.name}</h1>
+                <span className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em]">
+                  {asset.symbol}
+                </span>
+                <h1
+                  className="font-display text-4xl font-bold tracking-tight mt-1 text-foreground"
+                  style={{
+                    textShadow:
+                      "0 0 24px color-mix(in oklab, var(--brand-accent) 35%, transparent)",
+                  }}
+                >
+                  {asset.name}
+                </h1>
                 {quote?.price != null && (
                   <div className="flex items-baseline gap-3 mt-3">
-                    <span className="text-3xl font-display font-bold tabular-nums">{fmtPrice(quote.price, asset.currency, asset.category)}</span>
+                    <span className="text-3xl font-display font-bold tabular-nums">
+                      {fmtPrice(quote.price, asset.currency, asset.category)}
+                    </span>
                     {asset.currency !== "BRL" && asset.category !== "indices" && (
-                      <span className="text-base text-brand-muted tabular-nums">{fmtBRL(quote.priceBRL)}</span>
+                      <span className="text-base text-brand-muted tabular-nums">
+                        {fmtBRL(quote.priceBRL)}
+                      </span>
                     )}
                     {quote.changePercent != null && (
-                      <span className={`text-sm font-medium tabular-nums ${positive ? "text-brand-positive" : "text-brand-negative"}`}>
-                        {positive ? "+" : ""}{quote.changePercent.toFixed(2)}%
+                      <span
+                        className={`text-sm font-medium tabular-nums ${positive ? "text-brand-positive" : "text-brand-negative"}`}
+                      >
+                        {positive ? "+" : ""}
+                        {quote.changePercent.toFixed(2)}%
                       </span>
                     )}
                   </div>
                 )}
               </div>
               <div className="flex gap-2">
-                <button onClick={handleExportPDF} disabled={!historyQuery.data} className="px-3 py-2 bg-brand-surface-2 border border-brand-border hover:border-brand-accent/50 text-xs font-bold rounded transition-colors uppercase tracking-widest flex items-center gap-2 disabled:opacity-50">
+                <button
+                  onClick={handleExportPDF}
+                  disabled={!historyQuery.data}
+                  className="px-3 py-2 bg-brand-surface-2 border border-brand-border hover:border-brand-accent/50 text-xs font-bold rounded transition-colors uppercase tracking-widest flex items-center gap-2 disabled:opacity-50"
+                >
                   <FileText className="size-3.5" /> PDF
                 </button>
-                <button onClick={handleExportCSV} disabled={!historyQuery.data} className="px-3 py-2 bg-brand-surface-2 border border-brand-border hover:border-brand-accent/50 text-xs font-bold rounded transition-colors uppercase tracking-widest flex items-center gap-2 disabled:opacity-50">
+                <button
+                  onClick={handleExportCSV}
+                  disabled={!historyQuery.data}
+                  className="px-3 py-2 bg-brand-surface-2 border border-brand-border hover:border-brand-accent/50 text-xs font-bold rounded transition-colors uppercase tracking-widest flex items-center gap-2 disabled:opacity-50"
+                >
                   <FileSpreadsheet className="size-3.5" /> CSV
                 </button>
-                <button onClick={handleExportXLSX} disabled={!historyQuery.data} className="px-3 py-2 bg-brand-accent hover:bg-brand-accent/90 text-xs font-bold text-white rounded transition-colors uppercase tracking-widest flex items-center gap-2 disabled:opacity-50">
+                <button
+                  onClick={handleExportXLSX}
+                  disabled={!historyQuery.data}
+                  className="px-3 py-2 bg-brand-accent hover:bg-brand-accent/90 text-xs font-bold text-white rounded transition-colors uppercase tracking-widest flex items-center gap-2 disabled:opacity-50"
+                >
                   <Download className="size-3.5" /> Excel
                 </button>
               </div>
@@ -256,7 +330,9 @@ function AssetDetail() {
                     key={r.value}
                     onClick={() => setRange(r.value)}
                     className={`px-3 py-1.5 text-[11px] font-bold uppercase tracking-wider rounded transition-colors ${
-                      range === r.value ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted hover:text-foreground"
+                      range === r.value
+                        ? "bg-brand-accent text-white"
+                        : "bg-brand-surface-2 text-brand-muted hover:text-foreground"
                     }`}
                   >
                     {r.label}
@@ -269,7 +345,9 @@ function AssetDetail() {
                     key={iv.value}
                     onClick={() => setIntervalState(iv.value)}
                     className={`px-3 py-1 text-[11px] font-bold uppercase tracking-wider rounded transition-colors ${
-                      interval === iv.value ? "bg-brand-accent text-white" : "text-brand-muted hover:text-foreground"
+                      interval === iv.value
+                        ? "bg-brand-accent text-white"
+                        : "text-brand-muted hover:text-foreground"
                     }`}
                   >
                     {iv.label}
@@ -284,7 +362,10 @@ function AssetDetail() {
                 <div className="h-full w-full bg-brand-surface-2/40 rounded animate-pulse" />
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <ComposedChart
+                    data={chartData}
+                    margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                  >
                     <defs>
                       <filter id="chartGlow" x="-20%" y="-20%" width="140%" height="140%">
                         <feGaussianBlur stdDeviation="2.5" result="blur" />
@@ -294,24 +375,103 @@ function AssetDetail() {
                         </feMerge>
                       </filter>
                     </defs>
-                    <CartesianGrid stroke="var(--brand-border)" strokeDasharray="3 3" vertical={false} />
-                    <XAxis dataKey="date" tick={{ fill: "var(--brand-muted)", fontSize: 10 }} minTickGap={40} stroke="var(--brand-border)" />
-                    <YAxis tick={{ fill: "var(--brand-muted)", fontSize: 10 }} domain={["auto", "auto"]} stroke="var(--brand-border)" width={70} tickFormatter={(v) => fmtPrice(v, asset.currency, asset.category).replace(/\s/g, "")} />
+                    <CartesianGrid
+                      stroke="var(--brand-border)"
+                      strokeDasharray="3 3"
+                      vertical={false}
+                    />
+                    <XAxis
+                      dataKey="date"
+                      tick={{ fill: "var(--brand-muted)", fontSize: 10 }}
+                      minTickGap={40}
+                      stroke="var(--brand-border)"
+                    />
+                    <YAxis
+                      tick={{ fill: "var(--brand-muted)", fontSize: 10 }}
+                      domain={["auto", "auto"]}
+                      stroke="var(--brand-border)"
+                      width={70}
+                      tickFormatter={(v) =>
+                        fmtPrice(v, asset.currency, asset.category).replace(/\s/g, "")
+                      }
+                    />
                     <Tooltip
-                      contentStyle={{ background: "var(--brand-bg)", border: "1px solid var(--brand-border)", fontSize: 12 }}
+                      contentStyle={{
+                        background: "var(--brand-bg)",
+                        border: "1px solid var(--brand-border)",
+                        fontSize: 12,
+                      }}
                       labelStyle={{ color: "var(--brand-muted)" }}
                       formatter={(value, name) => {
                         const n = typeof value === "number" ? value : Number(value);
-                        return [Number.isFinite(n) ? fmtPrice(n, asset.currency, asset.category) : "—", String(name)];
+                        return [
+                          Number.isFinite(n) ? fmtPrice(n, asset.currency, asset.category) : "—",
+                          String(name),
+                        ];
                       }}
                     />
                     {/* Forecast confidence band */}
-                    <Area type="monotone" dataKey="band" stroke="none" fill="var(--brand-accent)" fillOpacity={0.12} isAnimationActive={false} />
-                    <Line type="monotone" dataKey="close" name="Preço" stroke="var(--brand-accent)" strokeWidth={2} dot={false} isAnimationActive={false} filter="url(#chartGlow)" />
-                    {showSMA && <Line type="monotone" dataKey="sma" name={`SMA ${showSMA}`} stroke="#f59e0b" strokeWidth={1} dot={false} isAnimationActive={false} />}
-                    {showEMA && <Line type="monotone" dataKey="ema" name={`EMA ${showEMA}`} stroke="#a855f7" strokeWidth={1} dot={false} isAnimationActive={false} />}
-                    {showEMA2 && <Line type="monotone" dataKey="ema2" name={`EMA ${showEMA2}`} stroke="#06b6d4" strokeWidth={1} dot={false} isAnimationActive={false} />}
-                    <Line type="monotone" dataKey="yhat" name="Previsão" stroke="var(--brand-accent)" strokeDasharray="4 4" strokeWidth={1.5} dot={false} isAnimationActive={false} />
+                    <Area
+                      type="monotone"
+                      dataKey="band"
+                      stroke="none"
+                      fill="var(--brand-accent)"
+                      fillOpacity={0.12}
+                      isAnimationActive={false}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="close"
+                      name="Preço"
+                      stroke="var(--brand-accent)"
+                      strokeWidth={2}
+                      dot={false}
+                      isAnimationActive={false}
+                      filter="url(#chartGlow)"
+                    />
+                    {showSMA && (
+                      <Line
+                        type="monotone"
+                        dataKey="sma"
+                        name={`SMA ${showSMA}`}
+                        stroke="#f59e0b"
+                        strokeWidth={1}
+                        dot={false}
+                        isAnimationActive={false}
+                      />
+                    )}
+                    {showEMA && (
+                      <Line
+                        type="monotone"
+                        dataKey="ema"
+                        name={`EMA ${showEMA}`}
+                        stroke="#a855f7"
+                        strokeWidth={1}
+                        dot={false}
+                        isAnimationActive={false}
+                      />
+                    )}
+                    {showEMA2 && (
+                      <Line
+                        type="monotone"
+                        dataKey="ema2"
+                        name={`EMA ${showEMA2}`}
+                        stroke="#06b6d4"
+                        strokeWidth={1}
+                        dot={false}
+                        isAnimationActive={false}
+                      />
+                    )}
+                    <Line
+                      type="monotone"
+                      dataKey="yhat"
+                      name="Previsão"
+                      stroke="var(--brand-accent)"
+                      strokeDasharray="4 4"
+                      strokeWidth={1.5}
+                      dot={false}
+                      isAnimationActive={false}
+                    />
                   </ComposedChart>
                 </ResponsiveContainer>
               )}
@@ -320,29 +480,71 @@ function AssetDetail() {
             {/* MA selectors */}
             <div className="mt-6 grid sm:grid-cols-3 gap-6">
               <div>
-                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2 flex items-center"><ColorDot color="#f59e0b" />SMA</div>
+                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2 flex items-center">
+                  <ColorDot color="#f59e0b" />
+                  SMA
+                </div>
                 <div className="flex flex-wrap gap-1">
-                  <button onClick={() => setShowSMA(null)} className={`px-2 py-1 text-[11px] rounded ${!showSMA ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted"}`}>Off</button>
+                  <button
+                    onClick={() => setShowSMA(null)}
+                    className={`px-2 py-1 text-[11px] rounded ${!showSMA ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted"}`}
+                  >
+                    Off
+                  </button>
                   {MA_PERIODS.map((p) => (
-                    <button key={p} onClick={() => setShowSMA(p)} className={`px-2 py-1 text-[11px] rounded tabular-nums ${showSMA === p ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted hover:text-foreground"}`}>{p}</button>
+                    <button
+                      key={p}
+                      onClick={() => setShowSMA(p)}
+                      className={`px-2 py-1 text-[11px] rounded tabular-nums ${showSMA === p ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted hover:text-foreground"}`}
+                    >
+                      {p}
+                    </button>
                   ))}
                 </div>
               </div>
               <div>
-                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2 flex items-center"><ColorDot color="#a855f7" />EMA 1</div>
+                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2 flex items-center">
+                  <ColorDot color="#a855f7" />
+                  EMA 1
+                </div>
                 <div className="flex flex-wrap gap-1">
-                  <button onClick={() => setShowEMA(null)} className={`px-2 py-1 text-[11px] rounded ${!showEMA ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted"}`}>Off</button>
+                  <button
+                    onClick={() => setShowEMA(null)}
+                    className={`px-2 py-1 text-[11px] rounded ${!showEMA ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted"}`}
+                  >
+                    Off
+                  </button>
                   {MA_PERIODS.map((p) => (
-                    <button key={p} onClick={() => setShowEMA(p)} className={`px-2 py-1 text-[11px] rounded tabular-nums ${showEMA === p ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted hover:text-foreground"}`}>{p}</button>
+                    <button
+                      key={p}
+                      onClick={() => setShowEMA(p)}
+                      className={`px-2 py-1 text-[11px] rounded tabular-nums ${showEMA === p ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted hover:text-foreground"}`}
+                    >
+                      {p}
+                    </button>
                   ))}
                 </div>
               </div>
               <div>
-                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2 flex items-center"><ColorDot color="#06b6d4" />EMA 2</div>
+                <div className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-2 flex items-center">
+                  <ColorDot color="#06b6d4" />
+                  EMA 2
+                </div>
                 <div className="flex flex-wrap gap-1">
-                  <button onClick={() => setShowEMA2(null)} className={`px-2 py-1 text-[11px] rounded ${!showEMA2 ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted"}`}>Off</button>
+                  <button
+                    onClick={() => setShowEMA2(null)}
+                    className={`px-2 py-1 text-[11px] rounded ${!showEMA2 ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted"}`}
+                  >
+                    Off
+                  </button>
                   {MA_PERIODS.map((p) => (
-                    <button key={p} onClick={() => setShowEMA2(p)} className={`px-2 py-1 text-[11px] rounded tabular-nums ${showEMA2 === p ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted hover:text-foreground"}`}>{p}</button>
+                    <button
+                      key={p}
+                      onClick={() => setShowEMA2(p)}
+                      className={`px-2 py-1 text-[11px] rounded tabular-nums ${showEMA2 === p ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted hover:text-foreground"}`}
+                    >
+                      {p}
+                    </button>
                   ))}
                 </div>
               </div>
@@ -353,15 +555,29 @@ function AssetDetail() {
         <aside className="col-span-12 lg:col-span-3 space-y-4">
           {/* Stats */}
           <div className="bg-brand-surface border border-brand-border rounded-lg p-4">
-            <h3 className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-3">Estatísticas do período</h3>
+            <h3 className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-3">
+              Estatísticas do período
+            </h3>
             {stats ? (
               <dl className="space-y-2 text-sm">
-                <Stat label="Abertura" value={fmtPrice(stats.open, asset.currency, asset.category)} />
-                <Stat label="Fechamento" value={fmtPrice(stats.close, asset.currency, asset.category)} />
+                <Stat
+                  label="Abertura"
+                  value={fmtPrice(stats.open, asset.currency, asset.category)}
+                />
+                <Stat
+                  label="Fechamento"
+                  value={fmtPrice(stats.close, asset.currency, asset.category)}
+                />
                 <Stat label="Máxima" value={fmtPrice(stats.max, asset.currency, asset.category)} />
                 <Stat label="Mínima" value={fmtPrice(stats.min, asset.currency, asset.category)} />
-                <Stat label="Variação" value={fmtPercent(stats.variation)} highlight={stats.variation >= 0 ? "pos" : "neg"} />
-                {asset.currency !== "BRL" && asset.category !== "indices" && <Stat label="Fechamento BRL" value={fmtBRL(stats.close * fxToBRL)} />}
+                <Stat
+                  label="Variação"
+                  value={fmtPercent(stats.variation)}
+                  highlight={stats.variation >= 0 ? "pos" : "neg"}
+                />
+                {asset.currency !== "BRL" && asset.category !== "indices" && (
+                  <Stat label="Fechamento BRL" value={fmtBRL(stats.close * fxToBRL)} />
+                )}
               </dl>
             ) : (
               <div className="text-brand-muted text-sm">—</div>
@@ -370,10 +586,16 @@ function AssetDetail() {
 
           {/* Forecast */}
           <div className="bg-brand-surface border border-brand-border rounded-lg p-4">
-            <h3 className="text-[10px] font-bold text-brand-accent uppercase tracking-[0.2em] mb-3">Previsão</h3>
+            <h3 className="text-[10px] font-bold text-brand-accent uppercase tracking-[0.2em] mb-3">
+              Previsão
+            </h3>
             <div className="flex flex-wrap gap-1 mb-3">
               {HORIZONS.map((h) => (
-                <button key={h} onClick={() => setHorizon(h)} className={`px-2 py-1 text-[11px] rounded tabular-nums ${horizon === h ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted hover:text-foreground"}`}>
+                <button
+                  key={h}
+                  onClick={() => setHorizon(h)}
+                  className={`px-2 py-1 text-[11px] rounded tabular-nums ${horizon === h ? "bg-brand-accent text-white" : "bg-brand-surface-2 text-brand-muted hover:text-foreground"}`}
+                >
                   {h}d
                 </button>
               ))}
@@ -382,35 +604,55 @@ function AssetDetail() {
               <div className="space-y-3">
                 <div className="flex justify-between text-xs">
                   <span className="text-brand-muted">Projeção</span>
-                  <span className="font-bold tabular-nums">{fmtPrice(fc.points[fc.points.length - 1].yhat, asset.currency, asset.category)}</span>
+                  <span className="font-bold tabular-nums">
+                    {fmtPrice(fc.points[fc.points.length - 1].yhat, asset.currency, asset.category)}
+                  </span>
                 </div>
                 {asset.currency !== "BRL" && asset.category !== "indices" && (
                   <div className="flex justify-between text-xs">
                     <span className="text-brand-muted">Projeção (BRL)</span>
-                    <span className="font-bold tabular-nums text-brand-accent">{fmtBRL(fc.points[fc.points.length - 1].yhat * fxToBRL)}</span>
+                    <span className="font-bold tabular-nums text-brand-accent">
+                      {fmtBRL(fc.points[fc.points.length - 1].yhat * fxToBRL)}
+                    </span>
                   </div>
                 )}
                 <div className="flex justify-between text-xs">
                   <span className="text-brand-muted">Intervalo 95%</span>
                   <span className="tabular-nums text-[11px]">
-                    {fmtPrice(fc.points[fc.points.length - 1].lower, asset.currency, asset.category)} — {fmtPrice(fc.points[fc.points.length - 1].upper, asset.currency, asset.category)}
+                    {fmtPrice(
+                      fc.points[fc.points.length - 1].lower,
+                      asset.currency,
+                      asset.category,
+                    )}{" "}
+                    —{" "}
+                    {fmtPrice(
+                      fc.points[fc.points.length - 1].upper,
+                      asset.currency,
+                      asset.category,
+                    )}
                   </span>
                 </div>
                 {asset.currency !== "BRL" && asset.category !== "indices" && (
                   <div className="flex justify-between text-xs">
                     <span className="text-brand-muted">Intervalo (BRL)</span>
                     <span className="tabular-nums text-[11px]">
-                      {fmtBRL(fc.points[fc.points.length - 1].lower * fxToBRL)} — {fmtBRL(fc.points[fc.points.length - 1].upper * fxToBRL)}
+                      {fmtBRL(fc.points[fc.points.length - 1].lower * fxToBRL)} —{" "}
+                      {fmtBRL(fc.points[fc.points.length - 1].upper * fxToBRL)}
                     </span>
                   </div>
                 )}
                 <div>
                   <div className="flex justify-between text-xs mb-1">
                     <span className="text-brand-muted">Confiança</span>
-                    <span className="font-bold tabular-nums">{(fc.confidence * 100).toFixed(1)}%</span>
+                    <span className="font-bold tabular-nums">
+                      {(fc.confidence * 100).toFixed(1)}%
+                    </span>
                   </div>
                   <div className="h-1 w-full bg-brand-surface-2 rounded-full overflow-hidden">
-                    <div className="h-full bg-brand-accent" style={{ width: `${Math.max(5, fc.confidence * 100)}%` }} />
+                    <div
+                      className="h-full bg-brand-accent"
+                      style={{ width: `${Math.max(5, fc.confidence * 100)}%` }}
+                    />
                   </div>
                 </div>
               </div>
@@ -418,17 +660,99 @@ function AssetDetail() {
               <p className="text-xs text-brand-muted">Dados insuficientes para previsão.</p>
             )}
           </div>
+
+          {/* Sinal de derivativos (funding rate + open interest) */}
+          {hasFuturesSignal(slug) && (
+            <div className="bg-brand-surface border border-brand-border rounded-lg p-4">
+              <h3 className="text-[10px] font-bold text-brand-accent uppercase tracking-[0.2em] mb-3">
+                Pressão de mercado (futuros)
+              </h3>
+              {derivativesQuery.isLoading ? (
+                <div className="h-24 w-full bg-brand-surface-2/40 rounded animate-pulse" />
+              ) : derivatives && derivatives.label !== "indisponivel" ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-brand-muted">Funding rate (atual)</span>
+                    <span
+                      className={`font-bold tabular-nums ${
+                        (derivatives.currentFundingRate ?? 0) >= 0
+                          ? "text-brand-positive"
+                          : "text-brand-negative"
+                      }`}
+                    >
+                      {derivatives.currentFundingRate != null
+                        ? `${(derivatives.currentFundingRate * 100).toFixed(4)}%`
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-brand-muted">Open Interest (var. 7d)</span>
+                    <span
+                      className={`font-bold tabular-nums ${
+                        (derivatives.openInterestChangePercent7d ?? 0) >= 0
+                          ? "text-brand-positive"
+                          : "text-brand-negative"
+                      }`}
+                    >
+                      {derivatives.openInterestChangePercent7d != null
+                        ? `${derivatives.openInterestChangePercent7d >= 0 ? "+" : ""}${derivatives.openInterestChangePercent7d.toFixed(1)}%`
+                        : "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-brand-muted">Pressão (short ← → long)</span>
+                      <span className="font-bold tabular-nums">
+                        {(derivatives.pressureScore * 100).toFixed(0)}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full bg-brand-surface-2 rounded-full overflow-hidden relative">
+                      <div className="absolute inset-y-0 left-1/2 w-px bg-brand-border" />
+                      <div
+                        className={`h-full ${derivatives.pressureScore >= 0 ? "bg-brand-positive ml-[50%]" : "bg-brand-negative mr-[50%] ml-auto"}`}
+                        style={{ width: `${Math.abs(derivatives.pressureScore) * 50}%` }}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-brand-muted leading-relaxed pt-1 border-t border-brand-border">
+                    {LABEL_DESCRIPTION[derivatives.label]}
+                  </p>
+                  <p className="text-[10px] text-brand-muted/70">
+                    Fonte: Binance Futures ({derivatives.futuresSymbol}). Heurística exploratória,
+                    não calibrada por backtest — use como contexto adicional, não como sinal de
+                    decisão isolado.
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-brand-muted">
+                  Dados de derivativos indisponíveis no momento.
+                </p>
+              )}
+            </div>
+          )}
         </aside>
       </div>
     </div>
   );
 }
 
-function Stat({ label, value, highlight }: { label: string; value: string; highlight?: "pos" | "neg" }) {
+function Stat({
+  label,
+  value,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  highlight?: "pos" | "neg";
+}) {
   return (
     <div className="flex justify-between gap-2">
       <dt className="text-brand-muted text-xs">{label}</dt>
-      <dd className={`font-medium tabular-nums text-xs ${highlight === "pos" ? "text-brand-positive" : highlight === "neg" ? "text-brand-negative" : ""}`}>{value}</dd>
+      <dd
+        className={`font-medium tabular-nums text-xs ${highlight === "pos" ? "text-brand-positive" : highlight === "neg" ? "text-brand-negative" : ""}`}
+      >
+        {value}
+      </dd>
     </div>
   );
 }
