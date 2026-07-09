@@ -68,44 +68,62 @@ async function fetchJson<T>(
 }
 
 // =============================================================================
-// Binance Futures (USDⓈ-M) — endpoints públicos, sem API key
+// Bybit V5 (linear/USDT perpetual) — endpoints públicos, sem API key.
+//
+// Trocado de Binance para Bybit porque a Binance Futures (fapi.binance.com)
+// retorna HTTP 403 para requisições vindas de certas infraestruturas de
+// hospedagem (bloqueio geográfico/regulatório). Bybit não apresentou esse
+// bloqueio nos testes.
 // =============================================================================
 
-const BINANCE_FAPI = "https://fapi.binance.com";
+const BYBIT_BASE = "https://api.bybit.com";
 
-interface BinanceFundingRateRaw {
+interface BybitRetEnvelope<T> {
+  retCode: number;
+  retMsg: string;
+  result: T;
+}
+
+interface BybitFundingRateRaw {
   symbol: string;
   fundingRate: string;
-  fundingTime: number;
-  markPrice?: string;
+  fundingRateTimestamp: string; // ms, como string
 }
 
-async function binanceFundingRateHistory(symbol: string, limit = 21): Promise<FundingRatePoint[]> {
-  const url = `${BINANCE_FAPI}/fapi/v1/fundingRate?symbol=${symbol}&limit=${limit}`;
-  const raw = await fetchJson<BinanceFundingRateRaw[]>(url, { timeoutMs: 6000, retries: 2 });
-  return raw
-    .map((p) => ({ t: p.fundingTime, rate: Number(p.fundingRate) }))
-    .filter((p) => Number.isFinite(p.rate));
+async function bybitFundingRateHistory(symbol: string, limit = 21): Promise<FundingRatePoint[]> {
+  const url = `${BYBIT_BASE}/v5/market/funding/history?category=linear&symbol=${symbol}&limit=${limit}`;
+  const raw = await fetchJson<BybitRetEnvelope<{ list: BybitFundingRateRaw[] }>>(url, {
+    timeoutMs: 6000,
+    retries: 2,
+  });
+  if (raw.retCode !== 0) throw new Error(`Bybit retCode=${raw.retCode} (${raw.retMsg})`);
+  return raw.result.list
+    .map((p) => ({ t: Number(p.fundingRateTimestamp), rate: Number(p.fundingRate) }))
+    .filter((p) => Number.isFinite(p.rate) && Number.isFinite(p.t))
+    .sort((a, b) => a.t - b.t); // API pode retornar mais recente primeiro; normalizamos para ascendente
 }
 
-interface BinanceOpenInterestHistRaw {
-  symbol: string;
-  sumOpenInterest: string;
-  sumOpenInterestValue: string;
-  timestamp: number;
+interface BybitOpenInterestRaw {
+  openInterest: string;
+  timestamp: string; // ms, como string
 }
 
-/** Histórico de Open Interest. period diário, limit=8 cobre ~7 dias corridos. */
-async function binanceOpenInterestHistory(
+/** Histórico de Open Interest. intervalTime diário, limit=8 cobre ~7 dias corridos. */
+async function bybitOpenInterestHistory(
   symbol: string,
-  period = "1d",
+  intervalTime = "1d",
   limit = 8,
 ): Promise<OpenInterestPoint[]> {
-  const url = `${BINANCE_FAPI}/futures/data/openInterestHist?symbol=${symbol}&period=${period}&limit=${limit}`;
-  const raw = await fetchJson<BinanceOpenInterestHistRaw[]>(url, { timeoutMs: 6000, retries: 2 });
-  return raw
-    .map((p) => ({ t: p.timestamp, openInterest: Number(p.sumOpenInterest) }))
-    .filter((p) => Number.isFinite(p.openInterest));
+  const url = `${BYBIT_BASE}/v5/market/open-interest?category=linear&symbol=${symbol}&intervalTime=${intervalTime}&limit=${limit}`;
+  const raw = await fetchJson<BybitRetEnvelope<{ list: BybitOpenInterestRaw[] }>>(url, {
+    timeoutMs: 6000,
+    retries: 2,
+  });
+  if (raw.retCode !== 0) throw new Error(`Bybit retCode=${raw.retCode} (${raw.retMsg})`);
+  return raw.result.list
+    .map((p) => ({ t: Number(p.timestamp), openInterest: Number(p.openInterest) }))
+    .filter((p) => Number.isFinite(p.openInterest) && Number.isFinite(p.t))
+    .sort((a, b) => a.t - b.t);
 }
 
 // =============================================================================
@@ -121,8 +139,8 @@ export const getDerivativesSignal = createServerFn({ method: "GET" })
     const futuresSymbol = FUTURES_SYMBOL[data.slug];
 
     const [fundingResult, oiResult] = await Promise.allSettled([
-      binanceFundingRateHistory(futuresSymbol, 21),
-      binanceOpenInterestHistory(futuresSymbol, "1d", 8),
+      bybitFundingRateHistory(futuresSymbol, 21),
+      bybitOpenInterestHistory(futuresSymbol, "1d", 8),
     ]);
 
     const debugErrors: string[] = [];
@@ -131,16 +149,16 @@ export const getDerivativesSignal = createServerFn({ method: "GET" })
     if (fundingResult.status === "rejected") {
       const msg = `fundingRate: ${String(fundingResult.reason)}`;
       debugErrors.push(msg);
-      log("warn", "binance-funding", `falha ${futuresSymbol}`, {
+      log("warn", "bybit-funding", `falha ${futuresSymbol}`, {
         err: String(fundingResult.reason),
       });
     }
 
     const openInterestHistory = oiResult.status === "fulfilled" ? oiResult.value : [];
     if (oiResult.status === "rejected") {
-      const msg = `openInterestHist: ${String(oiResult.reason)}`;
+      const msg = `openInterest: ${String(oiResult.reason)}`;
       debugErrors.push(msg);
-      log("warn", "binance-oi", `falha ${futuresSymbol}`, { err: String(oiResult.reason) });
+      log("warn", "bybit-oi", `falha ${futuresSymbol}`, { err: String(oiResult.reason) });
     }
 
     const signal = buildDerivativesSignal({
