@@ -49,6 +49,9 @@ export interface DerivativesSignal {
   pressureScore: number; // -1..1, média dos dois acima
   label: "long_squeeze_risk" | "short_squeeze_risk" | "neutro" | "indisponivel";
 
+  /** Mensagens de erro brutas (uma por fonte), só preenchido quando algo falhou. Útil para diagnóstico. */
+  debugErrors?: string[];
+
   updatedAt: string;
 }
 
@@ -76,8 +79,9 @@ export function buildDerivativesSignal(params: {
   futuresSymbol: string;
   fundingHistory: FundingRatePoint[];
   openInterestHistory: OpenInterestPoint[];
+  debugErrors?: string[];
 }): DerivativesSignal {
-  const { slug, futuresSymbol, fundingHistory, openInterestHistory } = params;
+  const { slug, futuresSymbol, fundingHistory, openInterestHistory, debugErrors } = params;
 
   const currentFundingRate = fundingHistory.length
     ? fundingHistory[fundingHistory.length - 1].rate
@@ -124,6 +128,7 @@ export function buildDerivativesSignal(params: {
     oiScore,
     pressureScore,
     label,
+    debugErrors: debugErrors && debugErrors.length ? debugErrors : undefined,
     updatedAt: new Date().toISOString(),
   };
 }

@@ -125,8 +125,12 @@ export const getDerivativesSignal = createServerFn({ method: "GET" })
       binanceOpenInterestHistory(futuresSymbol, "1d", 8),
     ]);
 
+    const debugErrors: string[] = [];
+
     const fundingHistory = fundingResult.status === "fulfilled" ? fundingResult.value : [];
     if (fundingResult.status === "rejected") {
+      const msg = `fundingRate: ${String(fundingResult.reason)}`;
+      debugErrors.push(msg);
       log("warn", "binance-funding", `falha ${futuresSymbol}`, {
         err: String(fundingResult.reason),
       });
@@ -134,6 +138,8 @@ export const getDerivativesSignal = createServerFn({ method: "GET" })
 
     const openInterestHistory = oiResult.status === "fulfilled" ? oiResult.value : [];
     if (oiResult.status === "rejected") {
+      const msg = `openInterestHist: ${String(oiResult.reason)}`;
+      debugErrors.push(msg);
       log("warn", "binance-oi", `falha ${futuresSymbol}`, { err: String(oiResult.reason) });
     }
 
@@ -142,6 +148,7 @@ export const getDerivativesSignal = createServerFn({ method: "GET" })
       futuresSymbol,
       fundingHistory,
       openInterestHistory,
+      debugErrors,
     });
 
     log("info", "getDerivativesSignal", "ok", { slug: data.slug, ms: Date.now() - t0 });
