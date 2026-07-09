@@ -724,9 +724,21 @@ function AssetDetail() {
                   </p>
                 </div>
               ) : (
-                <p className="text-xs text-brand-muted">
-                  Dados de derivativos indisponíveis no momento.
-                </p>
+                <div className="space-y-2">
+                  <p className="text-xs text-brand-muted">
+                    Dados de derivativos indisponíveis no momento.
+                  </p>
+                  {derivatives?.debugErrors && derivatives.debugErrors.length > 0 && (
+                    <div className="text-[10px] text-brand-negative/80 bg-brand-negative/5 border border-brand-negative/20 rounded p-2 space-y-1">
+                      <p className="font-bold uppercase tracking-wide">Detalhe técnico (debug):</p>
+                      {derivatives.debugErrors.map((err, i) => (
+                        <p key={i} className="break-all">
+                          {err}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
