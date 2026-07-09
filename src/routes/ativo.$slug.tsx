@@ -718,9 +718,9 @@ function AssetDetail() {
                     {LABEL_DESCRIPTION[derivatives.label]}
                   </p>
                   <p className="text-[10px] text-brand-muted/70">
-                    Fonte: Binance Futures ({derivatives.futuresSymbol}). Heurística exploratória,
-                    não calibrada por backtest — use como contexto adicional, não como sinal de
-                    decisão isolado.
+                    Fonte: Bybit Futures ({derivatives.futuresSymbol}). Heurística exploratória, não
+                    calibrada por backtest — use como contexto adicional, não como sinal de decisão
+                    isolado.
                   </p>
                 </div>
               ) : (
