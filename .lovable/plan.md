@@ -1,8 +1,10 @@
 ## Objetivo
-Substituir `src/routes/ativo.$slug.tsx` pela nova versão enviada (`ativo.$slug-3.tsx`).
+Adicionar dois novos arquivos e substituir um existente com as versões enviadas.
 
-## Passo
-1. Copiar `user-uploads://ativo.$slug-3.tsx` → `src/routes/ativo.$slug.tsx` (overwrite).
-2. Deixar o build automático validar imports e tipos.
+## Passos
+1. Copiar `user-uploads://etf-flows.ts` → `src/lib/finance/etf-flows.ts` (novo).
+2. Copiar `user-uploads://etf-flows.functions.ts` → `src/lib/api/etf-flows.functions.ts` (novo).
+3. Copiar `user-uploads://ativo.$slug.tsx` → `src/routes/ativo.$slug.tsx` (overwrite).
+4. Build automático valida imports e tipos.
 
-## Nenhum outro arquivo será alterado.
+Nenhum outro arquivo será alterado.
