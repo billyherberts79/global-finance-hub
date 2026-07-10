@@ -26,10 +26,12 @@ import {
 
 import { Header } from "@/components/Header";
 import { getDerivativesSignal } from "@/lib/api/derivatives.functions";
+import { getEtfFlowSignal } from "@/lib/api/etf-flows.functions";
 import { getHistory, getQuotes } from "@/lib/api/finance.functions";
 import { findAsset } from "@/lib/finance/assets";
 import { hasFuturesSignal, LABEL_DESCRIPTION } from "@/lib/finance/derivatives";
 import { exportAssetPDF, exportHistoryCSV, exportHistoryXLSX } from "@/lib/finance/exports";
+import { ETF_LABEL_DESCRIPTION, hasEtfFlowSignal } from "@/lib/finance/etf-flows";
 import { forecast } from "@/lib/finance/forecast";
 import { fmtBRL, fmtDate, fmtDateTime, fmtPercent, fmtPrice } from "@/lib/finance/format";
 import { ema, sma } from "@/lib/finance/indicators";
@@ -105,6 +107,7 @@ function AssetDetail() {
   const fetchHistory = useServerFn(getHistory);
   const fetchQuotes = useServerFn(getQuotes);
   const fetchDerivativesSignal = useServerFn(getDerivativesSignal);
+  const fetchEtfFlowSignal = useServerFn(getEtfFlowSignal);
 
   const [range, setRange] = useState<Range>("1y");
   const [interval, setIntervalState] = useState<Interval>("1d");
@@ -135,6 +138,15 @@ function AssetDetail() {
     retry: 1,
   });
   const derivatives = derivativesQuery.data;
+
+  const etfFlowQuery = useQuery({
+    queryKey: ["etf-flow-signal", slug],
+    queryFn: () => fetchEtfFlowSignal({ data: { slug } }),
+    enabled: hasEtfFlowSignal(slug),
+    staleTime: 30 * 60_000, // Farside atualiza ~1x por dia; 30min evita bater demais no site deles
+    retry: 1,
+  });
+  const etfFlow = etfFlowQuery.data;
 
   const closes = historyQuery.data?.candles.map((c) => c.close) ?? [];
   const smaSeries = useMemo(() => (showSMA ? sma(closes, showSMA) : null), [closes, showSMA]);
@@ -718,15 +730,112 @@ function AssetDetail() {
                     {LABEL_DESCRIPTION[derivatives.label]}
                   </p>
                   <p className="text-[10px] text-brand-muted/70">
-                    Fonte: Binance Futures ({derivatives.futuresSymbol}). Heurística exploratória,
-                    não calibrada por backtest — use como contexto adicional, não como sinal de
-                    decisão isolado.
+                    Fonte: Bybit Futures ({derivatives.futuresSymbol}). Heurística exploratória, não
+                    calibrada por backtest — use como contexto adicional, não como sinal de decisão
+                    isolado.
                   </p>
                 </div>
               ) : (
-                <p className="text-xs text-brand-muted">
-                  Dados de derivativos indisponíveis no momento.
-                </p>
+                <div className="space-y-2">
+                  <p className="text-xs text-brand-muted">
+                    Dados de derivativos indisponíveis no momento.
+                  </p>
+                  {derivatives?.debugErrors && derivatives.debugErrors.length > 0 && (
+                    <div className="text-[10px] text-brand-negative/80 bg-brand-negative/5 border border-brand-negative/20 rounded p-2 space-y-1">
+                      <p className="font-bold uppercase tracking-wide">Detalhe técnico (debug):</p>
+                      {derivatives.debugErrors.map((err, i) => (
+                        <p key={i} className="break-all">
+                          {err}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Sinal de fluxo de ETFs spot */}
+          {hasEtfFlowSignal(slug) && (
+            <div className="bg-brand-surface border border-brand-border rounded-lg p-4">
+              <h3 className="text-[10px] font-bold text-brand-accent uppercase tracking-[0.2em] mb-3">
+                Fluxo de ETFs spot
+              </h3>
+              {etfFlowQuery.isLoading ? (
+                <div className="h-24 w-full bg-brand-surface-2/40 rounded animate-pulse" />
+              ) : etfFlow && etfFlow.label !== "indisponivel" ? (
+                <div className="space-y-3">
+                  <div className="flex justify-between text-xs">
+                    <span className="text-brand-muted">
+                      Último dia ({etfFlow.latestDate ? fmtDate(new Date(etfFlow.latestDate)) : "—"}
+                      )
+                    </span>
+                    <span
+                      className={`font-bold tabular-nums ${
+                        (etfFlow.latestDayFlowUsdM ?? 0) >= 0
+                          ? "text-brand-positive"
+                          : "text-brand-negative"
+                      }`}
+                    >
+                      {etfFlow.latestDayFlowUsdM != null
+                        ? `${etfFlow.latestDayFlowUsdM >= 0 ? "+" : ""}US$ ${etfFlow.latestDayFlowUsdM.toFixed(1)}M`
+                        : "—"}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs">
+                    <span className="text-brand-muted">Acumulado (5 dias)</span>
+                    <span
+                      className={`font-bold tabular-nums ${
+                        (etfFlow.last5dFlowUsdM ?? 0) >= 0
+                          ? "text-brand-positive"
+                          : "text-brand-negative"
+                      }`}
+                    >
+                      {etfFlow.last5dFlowUsdM != null
+                        ? `${etfFlow.last5dFlowUsdM >= 0 ? "+" : ""}US$ ${etfFlow.last5dFlowUsdM.toFixed(1)}M`
+                        : "—"}
+                    </span>
+                  </div>
+                  <div>
+                    <div className="flex justify-between text-xs mb-1">
+                      <span className="text-brand-muted">Pressão (saída ← → entrada)</span>
+                      <span className="font-bold tabular-nums">
+                        {(etfFlow.pressureScore * 100).toFixed(0)}
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full bg-brand-surface-2 rounded-full overflow-hidden relative">
+                      <div className="absolute inset-y-0 left-1/2 w-px bg-brand-border" />
+                      <div
+                        className={`h-full ${etfFlow.pressureScore >= 0 ? "bg-brand-positive ml-[50%]" : "bg-brand-negative mr-[50%] ml-auto"}`}
+                        style={{ width: `${Math.abs(etfFlow.pressureScore) * 50}%` }}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-brand-muted leading-relaxed pt-1 border-t border-brand-border">
+                    {ETF_LABEL_DESCRIPTION[etfFlow.label]}
+                  </p>
+                  <p className="text-[10px] text-brand-muted/70">
+                    Fonte: Farside Investors (ETFs spot de Bitcoin nos EUA). Heurística
+                    exploratória, não calibrada por backtest — use como contexto adicional, não como
+                    sinal de decisão isolado.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <p className="text-xs text-brand-muted">
+                    Dados de fluxo de ETF indisponíveis no momento.
+                  </p>
+                  {etfFlow?.debugErrors && etfFlow.debugErrors.length > 0 && (
+                    <div className="text-[10px] text-brand-negative/80 bg-brand-negative/5 border border-brand-negative/20 rounded p-2 space-y-1">
+                      <p className="font-bold uppercase tracking-wide">Detalhe técnico (debug):</p>
+                      {etfFlow.debugErrors.map((err, i) => (
+                        <p key={i} className="break-all">
+                          {err}
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
