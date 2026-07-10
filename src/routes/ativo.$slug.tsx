@@ -718,27 +718,15 @@ function AssetDetail() {
                     {LABEL_DESCRIPTION[derivatives.label]}
                   </p>
                   <p className="text-[10px] text-brand-muted/70">
-                    Fonte: Bybit Futures ({derivatives.futuresSymbol}). Heurística exploratória, não
-                    calibrada por backtest — use como contexto adicional, não como sinal de decisão
-                    isolado.
+                    Fonte: Binance Futures ({derivatives.futuresSymbol}). Heurística exploratória,
+                    não calibrada por backtest — use como contexto adicional, não como sinal de
+                    decisão isolado.
                   </p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <p className="text-xs text-brand-muted">
-                    Dados de derivativos indisponíveis no momento.
-                  </p>
-                  {derivatives?.debugErrors && derivatives.debugErrors.length > 0 && (
-                    <div className="text-[10px] text-brand-negative/80 bg-brand-negative/5 border border-brand-negative/20 rounded p-2 space-y-1">
-                      <p className="font-bold uppercase tracking-wide">Detalhe técnico (debug):</p>
-                      {derivatives.debugErrors.map((err, i) => (
-                        <p key={i} className="break-all">
-                          {err}
-                        </p>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                <p className="text-xs text-brand-muted">
+                  Dados de derivativos indisponíveis no momento.
+                </p>
               )}
             </div>
           )}
