@@ -43,6 +43,10 @@ export interface EtfFlowSignal {
   pressureScore: number; // -1..1, média dos dois
 
   label: "strong_inflow" | "strong_outflow" | "neutro" | "indisponivel";
+
+  /** Histórico diário (mais recentes por último), exposto para uso em gráficos. */
+  history: EtfFlowDayPoint[];
+
   debugErrors?: string[];
   updatedAt: string;
 }
@@ -104,6 +108,7 @@ export function buildEtfFlowSignal(params: {
     cumulativeScore,
     pressureScore,
     label,
+    history: withData.slice(-60), // últimos 60 dias com dado publicado, para gráficos
     debugErrors: debugErrors && debugErrors.length ? debugErrors : undefined,
     updatedAt: new Date().toISOString(),
   };
