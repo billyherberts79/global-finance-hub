@@ -54,8 +54,8 @@ function FundingRateChart({ derivatives }: { derivatives: DerivativesSignal }) {
             <YAxis
               tick={{ fill: "var(--brand-muted)", fontSize: 9 }}
               stroke="var(--brand-border)"
-              tickFormatter={(v: number) => `${v.toFixed(2)}%`}
-              width={48}
+              tickFormatter={(v: number) => `${v.toFixed(4)}%`}
+              width={56}
             />
             <Tooltip
               {...tooltipStyle}
