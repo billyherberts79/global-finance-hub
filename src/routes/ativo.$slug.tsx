@@ -25,6 +25,7 @@ import {
 } from "recharts";
 
 import { Header } from "@/components/Header";
+import { IndicatorGuide } from "@/components/IndicatorGuide";
 import { getDerivativesSignal } from "@/lib/api/derivatives.functions";
 import { getEtfFlowSignal } from "@/lib/api/etf-flows.functions";
 import { getHistory, getQuotes } from "@/lib/api/finance.functions";
@@ -565,6 +566,10 @@ function AssetDetail() {
         </main>
 
         <aside className="col-span-12 lg:col-span-3 space-y-4">
+          <div className="flex justify-end">
+            <IndicatorGuide />
+          </div>
+
           {/* Stats */}
           <div className="bg-brand-surface border border-brand-border rounded-lg p-4">
             <h3 className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-3">
