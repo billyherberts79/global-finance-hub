@@ -1,10 +1,9 @@
 ## Objetivo
-Adicionar dois novos arquivos e substituir um existente com as versões enviadas.
+Adicionar o guia de indicadores e atualizar a página de ativo.
 
 ## Passos
-1. Copiar `user-uploads://etf-flows.ts` → `src/lib/finance/etf-flows.ts` (novo).
-2. Copiar `user-uploads://etf-flows.functions.ts` → `src/lib/api/etf-flows.functions.ts` (novo).
-3. Copiar `user-uploads://ativo.$slug.tsx` → `src/routes/ativo.$slug.tsx` (overwrite).
-4. Build automático valida imports e tipos.
+1. Criar `src/components/IndicatorGuide.tsx` a partir do arquivo enviado (modal com explicações de SMA/EMA, previsão, pressão de mercado, fluxos de ETF).
+2. Substituir `src/routes/ativo.$slug.tsx` pela nova versão: única diferença em relação à atual é o import do `IndicatorGuide` e o botão do guia alinhado à direita acima do conteúdo.
+3. Validar build/typecheck.
 
 Nenhum outro arquivo será alterado.
