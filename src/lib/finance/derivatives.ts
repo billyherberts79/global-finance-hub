@@ -49,6 +49,10 @@ export interface DerivativesSignal {
   pressureScore: number; // -1..1, média dos dois acima
   label: "long_squeeze_risk" | "short_squeeze_risk" | "neutro" | "indisponivel";
 
+  /** Histórico bruto, exposto para uso em gráficos (não usado no cálculo do score, que já usa esses mesmos dados agregados acima). */
+  fundingHistory: FundingRatePoint[];
+  openInterestHistory: OpenInterestPoint[];
+
   /** Mensagens de erro brutas (uma por fonte), só preenchido quando algo falhou. Útil para diagnóstico. */
   debugErrors?: string[];
 
@@ -98,7 +102,12 @@ export function buildDerivativesSignal(params: {
     ? openInterestHistory[openInterestHistory.length - 1].openInterest
     : null;
 
-  const oiWeekAgo = openInterestHistory.length ? openInterestHistory[0].openInterest : null;
+  // Pega o ponto ~7 dias antes do mais recente (não necessariamente o índice 0,
+  // já que o histórico buscado pode cobrir uma janela maior, ex.: 21 dias).
+  const weekAgoIdx = Math.max(0, openInterestHistory.length - 1 - 7);
+  const oiWeekAgo = openInterestHistory.length
+    ? openInterestHistory[weekAgoIdx].openInterest
+    : null;
 
   const openInterestChangePercent7d =
     openInterestNow != null && oiWeekAgo != null && oiWeekAgo !== 0
@@ -128,6 +137,8 @@ export function buildDerivativesSignal(params: {
     oiScore,
     pressureScore,
     label,
+    fundingHistory,
+    openInterestHistory,
     debugErrors: debugErrors && debugErrors.length ? debugErrors : undefined,
     updatedAt: new Date().toISOString(),
   };

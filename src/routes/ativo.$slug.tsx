@@ -25,11 +25,14 @@ import {
 } from "recharts";
 
 import { Header } from "@/components/Header";
+import { CompositeScoreCard } from "@/components/CompositeScoreCard";
 import { IndicatorGuide } from "@/components/IndicatorGuide";
+import { PressureHistoryCharts } from "@/components/PressureHistoryCharts";
 import { getDerivativesSignal } from "@/lib/api/derivatives.functions";
 import { getEtfFlowSignal } from "@/lib/api/etf-flows.functions";
 import { getHistory, getQuotes } from "@/lib/api/finance.functions";
 import { findAsset } from "@/lib/finance/assets";
+import { buildCompositeScore, computeTechnicalScore } from "@/lib/finance/composite-score";
 import { hasFuturesSignal, LABEL_DESCRIPTION } from "@/lib/finance/derivatives";
 import { exportAssetPDF, exportHistoryCSV, exportHistoryXLSX } from "@/lib/finance/exports";
 import { ETF_LABEL_DESCRIPTION, hasEtfFlowSignal } from "@/lib/finance/etf-flows";
@@ -162,6 +165,33 @@ function AssetDetail() {
       horizon,
     );
   }, [historyQuery.data, horizon]);
+
+  const composite = useMemo(() => {
+    const technicalScore = computeTechnicalScore(fc);
+    return buildCompositeScore([
+      {
+        key: "technical",
+        label: "Indicadores técnicos",
+        score: technicalScore,
+        weight: 40,
+        available: fc != null && fc.points.length > 0,
+      },
+      {
+        key: "etf",
+        label: "Fluxo de ETFs spot",
+        score: etfFlow?.pressureScore ?? 0,
+        weight: 25,
+        available: hasEtfFlowSignal(slug) && !!etfFlow && etfFlow.label !== "indisponivel",
+      },
+      {
+        key: "derivatives",
+        label: "Pressão de derivativos",
+        score: derivatives?.pressureScore ?? 0,
+        weight: 20,
+        available: hasFuturesSignal(slug) && !!derivatives && derivatives.label !== "indisponivel",
+      },
+    ]);
+  }, [fc, etfFlow, derivatives, slug]);
 
   const chartData = useMemo(() => {
     if (!historyQuery.data) return [];
@@ -570,6 +600,8 @@ function AssetDetail() {
             <IndicatorGuide />
           </div>
 
+          <CompositeScoreCard composite={composite} />
+
           {/* Stats */}
           <div className="bg-brand-surface border border-brand-border rounded-lg p-4">
             <h3 className="text-[10px] font-bold text-brand-muted uppercase tracking-[0.2em] mb-3">
@@ -845,6 +877,10 @@ function AssetDetail() {
             </div>
           )}
         </aside>
+      </div>
+
+      <div className="mt-6">
+        <PressureHistoryCharts derivatives={derivatives} etfFlow={etfFlow} />
       </div>
     </div>
   );

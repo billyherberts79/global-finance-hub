@@ -139,8 +139,8 @@ export const getDerivativesSignal = createServerFn({ method: "GET" })
     const futuresSymbol = FUTURES_SYMBOL[data.slug];
 
     const [fundingResult, oiResult] = await Promise.allSettled([
-      bybitFundingRateHistory(futuresSymbol, 21),
-      bybitOpenInterestHistory(futuresSymbol, "1d", 8),
+      bybitFundingRateHistory(futuresSymbol, 63), // ~21 dias (3 fundings/dia) — mais contexto para o gráfico
+      bybitOpenInterestHistory(futuresSymbol, "1d", 21), // ~21 dias
     ]);
 
     const debugErrors: string[] = [];
