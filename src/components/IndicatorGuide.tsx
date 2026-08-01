@@ -54,6 +54,15 @@ const SECTIONS: GuideSection[] = [
     limits:
       'Os dados são publicados com um dia de atraso (geralmente à noite, horário dos EUA) e a fonte (Farside Investors) não oferece uma API oficial — o dado é obtido lendo a tabela pública do site deles, o que é mais frágil que uma API estruturada. Os limiares de "fluxo forte" (US$ 300M/dia, US$ 1.200M em 5 dias) também são heurísticas, não calibradas por backtest.',
   },
+  {
+    title: "Score composto",
+    whatItIs:
+      'Uma única nota (-100 a +100) que resume os três indicadores acima numa média ponderada, para dar uma leitura rápida de "pra qual lado o conjunto de sinais está pendendo", em vez de olhar cada um isoladamente.',
+    howToRead:
+      'Cada fator entra com um peso diferente, refletindo a relevância relativa que atribuímos a ele: indicadores técnicos (tendência de preço) valem 40, fluxo de ETFs vale 25, e pressão de derivativos (funding + Open Interest) vale 20. Esses pesos somam 85, não 100, porque um quarto fator planejado — o basis de futuros da CME — não foi implementado por não termos encontrado uma fonte gratuita confiável para ele. O peso dele (15) é redistribuído proporcionalmente entre os três fatores disponíveis, então eles acabam valendo, na prática, ~47%, ~29% e ~24% do score final, nessa ordem. Se algum fator individual estiver indisponível no momento (ex.: API fora do ar), o mesmo tipo de redistribuição acontece automaticamente entre os que restaram — o score nunca é "puxado para zero" só por falta de um dado pontual.',
+    limits:
+      'É uma média ponderada simples, não um modelo estatístico treinado — os pesos (40/25/20) foram definidos por julgamento de relevância, não calibrados por backtest. Quando os fatores discordam entre si (ex.: preço em alta mas ETFs em saída), o resultado tende a ficar próximo de zero ("neutro"), o que é o comportamento esperado de uma média, mas pode esconder um sinal de alerta que valeria olhar componente a componente.',
+  },
 ];
 
 export function IndicatorGuide() {
