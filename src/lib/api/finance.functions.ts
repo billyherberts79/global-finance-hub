@@ -7,7 +7,12 @@ import { ASSETS, FX_PAIRS, findAsset, type AssetCategory } from "../finance/asse
 // Logging
 // =============================================================================
 
-function log(level: "info" | "warn" | "error", scope: string, msg: string, extra?: Record<string, unknown>) {
+function log(
+  level: "info" | "warn" | "error",
+  scope: string,
+  msg: string,
+  extra?: Record<string, unknown>,
+) {
   const line = JSON.stringify({ ts: new Date().toISOString(), level, scope, msg, ...extra });
   if (level === "error") console.error(line);
   else if (level === "warn") console.warn(line);
@@ -18,7 +23,10 @@ function log(level: "info" | "warn" | "error", scope: string, msg: string, extra
 // HTTP helper with timeout + retry
 // =============================================================================
 
-async function fetchJson<T>(url: string, opts: { timeoutMs?: number; retries?: number } = {}): Promise<T> {
+async function fetchJson<T>(
+  url: string,
+  opts: { timeoutMs?: number; retries?: number } = {},
+): Promise<T> {
   const timeoutMs = opts.timeoutMs ?? 6000;
   const retries = opts.retries ?? 3;
   let lastErr: unknown;
@@ -37,9 +45,10 @@ async function fetchJson<T>(url: string, opts: { timeoutMs?: number; retries?: n
       if (!res.ok) {
         if ((res.status === 429 || res.status >= 500) && attempt < retries) {
           const retryAfter = Number(res.headers.get("retry-after"));
-          const wait = Number.isFinite(retryAfter) && retryAfter > 0
-            ? retryAfter * 1000
-            : Math.min(8000, 800 * Math.pow(2, attempt)) + Math.random() * 300;
+          const wait =
+            Number.isFinite(retryAfter) && retryAfter > 0
+              ? retryAfter * 1000
+              : Math.min(8000, 800 * Math.pow(2, attempt)) + Math.random() * 300;
           await new Promise((r) => setTimeout(r, wait));
           continue;
         }
@@ -119,7 +128,11 @@ interface CGMarketChart {
   total_volumes: [number, number][];
 }
 
-async function coingeckoMarketChart(id: string, days: number, daily = true): Promise<CGMarketChart> {
+async function coingeckoMarketChart(
+  id: string,
+  days: number,
+  daily = true,
+): Promise<CGMarketChart> {
   const intervalParam = daily ? "&interval=daily" : "";
   const url = `https://api.coingecko.com/api/v3/coins/${id}/market_chart?vs_currency=usd&days=${days}${intervalParam}`;
   return await fetchJson<CGMarketChart>(url, { timeoutMs: 8000, retries: 3 });
@@ -140,7 +153,8 @@ async function getFxRatesToBRL(): Promise<Record<string, number>> {
     }),
   );
   for (const [i, res] of results.entries()) {
-    if (res.status === "rejected") log("warn", "fx", `Falha ${entries[i][0]}`, { err: String(res.reason) });
+    if (res.status === "rejected")
+      log("warn", "fx", `Falha ${entries[i][0]}`, { err: String(res.reason) });
   }
   // sane fallbacks
   if (!rates.USD) rates.USD = 5.0;
@@ -200,110 +214,168 @@ export interface HistoryResponse {
 // getQuotes — snapshot of all assets
 // =============================================================================
 
-export const getQuotes = createServerFn({ method: "GET" }).handler(async (): Promise<QuotesResponse> => {
-  const t0 = Date.now();
-  const fxRates = await getFxRatesToBRL();
+export const getQuotes = createServerFn({ method: "GET" }).handler(
+  async (): Promise<QuotesResponse> => {
+    const t0 = Date.now();
+    const fxRates = await getFxRatesToBRL();
 
-  const cryptoIds = ASSETS.filter((a) => a.source === "coingecko").map((a) => a.apiId);
-  const yahooAssets = ASSETS.filter((a) => a.source === "yahoo");
+    const cryptoIds = ASSETS.filter((a) => a.source === "coingecko").map((a) => a.apiId);
+    const yahooAssets = ASSETS.filter((a) => a.source === "yahoo");
 
-  const [cgRes, yahooResults] = await Promise.all([
-    coingeckoMarkets(cryptoIds).catch((e) => {
-      log("warn", "coingecko", "markets failed", { err: String(e) });
-      return [] as CGMarket[];
-    }),
-    Promise.all(
-      yahooAssets.map(async (a) => {
-        try {
-          const r = await yahooChart(a.apiId, "5d", "1h");
-          return { asset: a, data: r, error: null as string | null };
-        } catch (e) {
-          return { asset: a, data: null, error: String(e) };
-        }
+    const [cgRes, yahooResults] = await Promise.all([
+      coingeckoMarkets(cryptoIds).catch((e) => {
+        log("warn", "coingecko", "markets failed", { err: String(e) });
+        return [] as CGMarket[];
       }),
-    ),
-  ]);
+      Promise.all(
+        yahooAssets.map(async (a) => {
+          try {
+            // Duas buscas separadas e propositalmente redundantes:
+            // - `intraday` (5d/1h) só alimenta o sparkline (mini-gráfico visual).
+            // - `daily` (5d/1d) é a única fonte usada para preço e variação %.
+            //   Isso evita depender do campo meta.chartPreviousClose, que se
+            //   mostrou pouco confiável quando a janela pedida (`range`) é
+            //   maior que 1 dia — em vez disso, usamos diretamente os dois
+            //   últimos fechamentos diários, que são inequívocos.
+            const [intraday, daily] = await Promise.all([
+              yahooChart(a.apiId, "5d", "1h"),
+              yahooChart(a.apiId, "5d", "1d"),
+            ]);
+            return { asset: a, intraday, daily, error: null as string | null };
+          } catch (e) {
+            return { asset: a, intraday: null, daily: null, error: String(e) };
+          }
+        }),
+      ),
+    ]);
 
-  const quotes: QuoteSnapshot[] = [];
+    const quotes: QuoteSnapshot[] = [];
 
-  // Crypto
-  for (const a of ASSETS.filter((x) => x.source === "coingecko")) {
-    const m = cgRes.find((x) => x.id === a.apiId);
-    const fx = fxRates[a.currency] ?? 1;
-    if (m) {
+    // Crypto
+    for (const a of ASSETS.filter((x) => x.source === "coingecko")) {
+      const m = cgRes.find((x) => x.id === a.apiId);
+      const fx = fxRates[a.currency] ?? 1;
+      if (m) {
+        quotes.push({
+          slug: a.slug,
+          name: a.name,
+          symbol: a.symbol,
+          category: a.category,
+          currency: a.currency,
+          price: m.current_price,
+          priceBRL: m.current_price * fx,
+          changePercent: m.price_change_percentage_24h,
+          high24h: m.high_24h,
+          low24h: m.low_24h,
+          marketCap: m.market_cap,
+          volume: m.total_volume,
+          sparkline: [],
+          updatedAt: m.last_updated,
+        });
+      } else {
+        quotes.push({
+          slug: a.slug,
+          name: a.name,
+          symbol: a.symbol,
+          category: a.category,
+          currency: a.currency,
+          price: null,
+          priceBRL: null,
+          changePercent: null,
+          high24h: null,
+          low24h: null,
+          sparkline: [],
+          updatedAt: new Date().toISOString(),
+          stale: true,
+        });
+      }
+    }
+
+    // Yahoo
+    for (const { asset: a, intraday, daily, error } of yahooResults) {
+      const fx = fxRates[a.currency] ?? 1;
+      if ((!intraday && !daily) || error) {
+        log("warn", "yahoo", `falha ${a.symbol}`, { err: error ?? "no-data" });
+        quotes.push({
+          slug: a.slug,
+          name: a.name,
+          symbol: a.symbol,
+          category: a.category,
+          currency: a.currency,
+          price: null,
+          priceBRL: null,
+          changePercent: null,
+          high24h: null,
+          low24h: null,
+          sparkline: [],
+          updatedAt: new Date().toISOString(),
+          stale: true,
+        });
+        continue;
+      }
+
+      const intradayResult = intraday?.chart.result?.[0];
+      const intradayCloses = (intradayResult?.indicators.quote[0]?.close ?? []).filter(
+        (v): v is number => typeof v === "number",
+      );
+
+      const dailyResult = daily?.chart.result?.[0];
+      const dailyMeta = dailyResult?.meta;
+      const dailyCloses = (dailyResult?.indicators.quote[0]?.close ?? []).filter(
+        (v): v is number => typeof v === "number",
+      );
+
+      // Preço atual: preferimos o preço "ao vivo" do meta; se ausente, o
+      // último fechamento diário disponível.
+      const price = dailyMeta?.regularMarketPrice ?? dailyCloses[dailyCloses.length - 1] ?? null;
+
+      // Fechamento anterior: o penúltimo fechamento diário é sempre a última
+      // sessão completa antes da atual — não depende de nenhum campo de meta
+      // ambíguo. Só cai para os campos de meta como último recurso, se por
+      // algum motivo a série diária vier com menos de 2 pontos.
+      const prev =
+        dailyCloses.length >= 2
+          ? dailyCloses[dailyCloses.length - 2]
+          : (dailyMeta?.chartPreviousClose ?? dailyMeta?.previousClose ?? null);
+
+      const change =
+        price != null && prev != null && prev !== 0 ? ((price - prev) / prev) * 100 : null;
+
       quotes.push({
         slug: a.slug,
         name: a.name,
         symbol: a.symbol,
         category: a.category,
         currency: a.currency,
-        price: m.current_price,
-        priceBRL: m.current_price * fx,
-        changePercent: m.price_change_percentage_24h,
-        high24h: m.high_24h,
-        low24h: m.low_24h,
-        marketCap: m.market_cap,
-        volume: m.total_volume,
-        sparkline: [],
-        updatedAt: m.last_updated,
-      });
-    } else {
-      quotes.push({
-        slug: a.slug, name: a.name, symbol: a.symbol, category: a.category, currency: a.currency,
-        price: null, priceBRL: null, changePercent: null, high24h: null, low24h: null,
-        sparkline: [], updatedAt: new Date().toISOString(), stale: true,
+        price,
+        priceBRL: price != null ? price * fx : null,
+        changePercent: change,
+        high24h: dailyMeta?.regularMarketDayHigh ?? null,
+        low24h: dailyMeta?.regularMarketDayLow ?? null,
+        sparkline: intradayCloses.slice(-24),
+        updatedAt: dailyMeta?.regularMarketTime
+          ? new Date(dailyMeta.regularMarketTime * 1000).toISOString()
+          : new Date().toISOString(),
       });
     }
-  }
 
-  // Yahoo
-  for (const { asset: a, data, error } of yahooResults) {
-    const fx = fxRates[a.currency] ?? 1;
-    if (!data || error) {
-      log("warn", "yahoo", `falha ${a.symbol}`, { err: error ?? "no-data" });
-      quotes.push({
-        slug: a.slug, name: a.name, symbol: a.symbol, category: a.category, currency: a.currency,
-        price: null, priceBRL: null, changePercent: null, high24h: null, low24h: null,
-        sparkline: [], updatedAt: new Date().toISOString(), stale: true,
-      });
-      continue;
-    }
-    const result = data.chart.result?.[0];
-    const meta = result?.meta;
-    const closes = (result?.indicators.quote[0]?.close ?? []).filter((v): v is number => typeof v === "number");
-    const price = meta?.regularMarketPrice ?? closes[closes.length - 1] ?? null;
-    const prev = meta?.chartPreviousClose ?? meta?.previousClose ?? closes[0] ?? null;
-    const change = price != null && prev != null && prev !== 0 ? ((price - prev) / prev) * 100 : null;
-    quotes.push({
-      slug: a.slug,
-      name: a.name,
-      symbol: a.symbol,
-      category: a.category,
-      currency: a.currency,
-      price,
-      priceBRL: price != null ? price * fx : null,
-      changePercent: change,
-      high24h: meta?.regularMarketDayHigh ?? null,
-      low24h: meta?.regularMarketDayLow ?? null,
-      sparkline: closes.slice(-24),
-      updatedAt: meta?.regularMarketTime ? new Date(meta.regularMarketTime * 1000).toISOString() : new Date().toISOString(),
-    });
-  }
-
-  log("info", "getQuotes", "ok", { ms: Date.now() - t0, count: quotes.length });
-  return { fxRates, quotes, fetchedAt: new Date().toISOString() };
-});
+    log("info", "getQuotes", "ok", { ms: Date.now() - t0, count: quotes.length });
+    return { fxRates, quotes, fetchedAt: new Date().toISOString() };
+  },
+);
 
 // =============================================================================
 // getHistory — historical candles for an asset
 // =============================================================================
 
 export const getHistory = createServerFn({ method: "GET" })
-  .inputValidator(z.object({
-    slug: z.string(),
-    range: z.enum(["1mo", "3mo", "6mo", "1y", "2y"]).default("1y"),
-    interval: z.enum(["5m", "15m", "1h", "3h", "1d", "1wk"]).default("1d"),
-  }))
+  .inputValidator(
+    z.object({
+      slug: z.string(),
+      range: z.enum(["1mo", "3mo", "6mo", "1y", "2y"]).default("1y"),
+      interval: z.enum(["5m", "15m", "1h", "3h", "1d", "1wk"]).default("1d"),
+    }),
+  )
   .handler(async ({ data }): Promise<HistoryResponse> => {
     const t0 = Date.now();
     const asset = findAsset(data.slug);
@@ -312,15 +384,36 @@ export const getHistory = createServerFn({ method: "GET" })
     const fxRates = await getFxRatesToBRL();
     const fx = fxRates[asset.currency] ?? 1;
 
-    const isIntraday = data.interval === "5m" || data.interval === "15m" || data.interval === "1h" || data.interval === "3h";
+    const isIntraday =
+      data.interval === "5m" ||
+      data.interval === "15m" ||
+      data.interval === "1h" ||
+      data.interval === "3h";
 
     let candles: HistoryCandle[] = [];
     if (asset.source === "coingecko") {
       const days = isIntraday
-        ? (data.interval === "5m" ? 1 : data.interval === "15m" ? 2 : data.interval === "1h" ? 14 : 60)
-        : (data.range === "1mo" ? 30 : data.range === "3mo" ? 90 : data.range === "6mo" ? 180 : data.range === "1y" ? 365 : 730);
+        ? data.interval === "5m"
+          ? 1
+          : data.interval === "15m"
+            ? 2
+            : data.interval === "1h"
+              ? 14
+              : 60
+        : data.range === "1mo"
+          ? 30
+          : data.range === "3mo"
+            ? 90
+            : data.range === "6mo"
+              ? 180
+              : data.range === "1y"
+                ? 365
+                : 730;
       const chart = await coingeckoMarketChart(asset.apiId, days, !isIntraday);
-      let daily = chart.prices.map(([t, p]) => ({ t, open: null, high: null, low: null, close: p, volume: null } as HistoryCandle));
+      let daily = chart.prices.map(
+        ([t, p]) =>
+          ({ t, open: null, high: null, low: null, close: p, volume: null }) as HistoryCandle,
+      );
       if (data.interval === "15m" || data.interval === "3h") {
         // Aggregate every 3 source points (5m→15m or 1h→3h)
         const out: HistoryCandle[] = [];
@@ -343,7 +436,9 @@ export const getHistory = createServerFn({ method: "GET" })
         for (const c of daily) {
           const d = new Date(c.t);
           const day = d.getUTCDay();
-          const monday = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - ((day + 6) % 7)));
+          const monday = new Date(
+            Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - ((day + 6) % 7)),
+          );
           const k = monday.toISOString().slice(0, 10);
           if (!weeks.has(k)) weeks.set(k, []);
           weeks.get(k)!.push(c);
@@ -360,26 +455,35 @@ export const getHistory = createServerFn({ method: "GET" })
       candles = daily;
     } else {
       // Yahoo intraday: choose appropriate range + native interval (3h → aggregate from 60m)
-      const yahooInterval = data.interval === "3h" ? "60m" : data.interval === "1h" ? "60m" : data.interval;
+      const yahooInterval =
+        data.interval === "3h" ? "60m" : data.interval === "1h" ? "60m" : data.interval;
       const yahooRange = isIntraday
-        ? (data.interval === "5m" ? "5d" : data.interval === "15m" ? "1mo" : data.interval === "1h" ? "3mo" : "6mo")
+        ? data.interval === "5m"
+          ? "5d"
+          : data.interval === "15m"
+            ? "1mo"
+            : data.interval === "1h"
+              ? "3mo"
+              : "6mo"
         : data.range;
       const yr = await yahooChart(asset.apiId, yahooRange, yahooInterval);
       const r = yr.chart.result?.[0];
       const ts = r?.timestamp ?? [];
       const q = r?.indicators.quote[0];
-      candles = ts.map((tSec, i) => {
-        const close = q?.close?.[i];
-        if (close == null) return null;
-        return {
-          t: tSec * 1000,
-          open: q?.open?.[i] ?? null,
-          high: q?.high?.[i] ?? null,
-          low: q?.low?.[i] ?? null,
-          close: close as number,
-          volume: q?.volume?.[i] ?? null,
-        };
-      }).filter((c): c is HistoryCandle => c !== null);
+      candles = ts
+        .map((tSec, i) => {
+          const close = q?.close?.[i];
+          if (close == null) return null;
+          return {
+            t: tSec * 1000,
+            open: q?.open?.[i] ?? null,
+            high: q?.high?.[i] ?? null,
+            low: q?.low?.[i] ?? null,
+            close: close as number,
+            volume: q?.volume?.[i] ?? null,
+          };
+        })
+        .filter((c): c is HistoryCandle => c !== null);
 
       if (data.interval === "3h" && candles.length) {
         const out: HistoryCandle[] = [];
@@ -399,7 +503,12 @@ export const getHistory = createServerFn({ method: "GET" })
       }
     }
 
-    log("info", "getHistory", "ok", { slug: data.slug, range: data.range, n: candles.length, ms: Date.now() - t0 });
+    log("info", "getHistory", "ok", {
+      slug: data.slug,
+      range: data.range,
+      n: candles.length,
+      ms: Date.now() - t0,
+    });
     return { slug: data.slug, currency: asset.currency, candles, fxToBRL: fx };
   });
 
@@ -430,12 +539,14 @@ async function ping(name: string, fn: () => Promise<unknown>): Promise<HealthChe
   }
 }
 
-export const getHealth = createServerFn({ method: "GET" }).handler(async (): Promise<HealthResponse> => {
-  const checks = await Promise.all([
-    ping("Yahoo Finance (Moedas)", () => yahooChart("USDBRL=X", "1d", "1d")),
-    ping("Yahoo Finance (Índices)", () => yahooChart("^GSPC", "1d", "1d")),
-    ping("Yahoo Finance (Commodities)", () => yahooChart("GC=F", "1d", "1d")),
-    ping("CoinGecko", () => coingeckoMarkets(["bitcoin"])),
-  ]);
-  return { checks, checkedAt: new Date().toISOString() };
-});
+export const getHealth = createServerFn({ method: "GET" }).handler(
+  async (): Promise<HealthResponse> => {
+    const checks = await Promise.all([
+      ping("Yahoo Finance (Moedas)", () => yahooChart("USDBRL=X", "1d", "1d")),
+      ping("Yahoo Finance (Índices)", () => yahooChart("^GSPC", "1d", "1d")),
+      ping("Yahoo Finance (Commodities)", () => yahooChart("GC=F", "1d", "1d")),
+      ping("CoinGecko", () => coingeckoMarkets(["bitcoin"])),
+    ]);
+    return { checks, checkedAt: new Date().toISOString() };
+  },
+);
